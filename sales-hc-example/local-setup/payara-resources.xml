@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE resources PUBLIC "-//Payara.fish//DTD Payara Server 4 Resource Definitions//EN" "http://docs.payara.fish/schemas/payara-resources_1_8.dtd">
+<resources>
+    <jdbc-connection-pool log-jdbc-calls="true"
+                          ping="true"
+                          datasource-classname="org.h2.jdbcx.JdbcDataSource"
+                          name="H2SalesPool"
+                          res-type="javax.sql.DataSource">
+        <property name="password" value="sa"/>
+        <property name="user" value="sa"/>
+        <property name="url" value="jdbc:h2:file:./db/sales;MODE=MariaDB"/>
+    </jdbc-connection-pool>
+    <jdbc-resource pool-name="H2SalesPool" jndi-name="jdbc/sales"/>
+</resources>

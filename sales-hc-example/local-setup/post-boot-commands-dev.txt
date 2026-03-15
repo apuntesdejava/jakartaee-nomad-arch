@@ -1,0 +1,1 @@
+add-resources ./local-setup/payara-resources.xml

@@ -1,0 +1,19 @@
+GET  http://localhost:8080/api/product
+
+###
+ POST http://localhost:8080/api/product
+Content-Type: Application/json
+
+{
+"name":"Keyboard",
+"price":15.0
+}
+
+###
+GET  http://localhost:8080/api/product/10
+
+
+###
+### Estado de la base de datos
+
+GET http://localhost:8080/api/check-database
