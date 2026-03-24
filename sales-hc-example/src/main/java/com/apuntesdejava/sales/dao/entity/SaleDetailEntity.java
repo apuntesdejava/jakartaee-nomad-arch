@@ -1,35 +1,39 @@
-package com.apuntesdejava.clients.dao.entity;
+package com.apuntesdejava.sales.dao.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.ToString;
 
 @Entity
-@Table(name = "client")
+@Table(name = "sale_detail")
 @Getter
 @Setter
 @EqualsAndHashCode(of = "id")
-@ToString
-public class ClientEntity {
+public class SaleDetailEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "first_name")
-    private String firstName;
+    @Column(name = "product_id")
+    private Integer productId;
 
-    @Column(name = "last_name")
-    private String lastName;
+    @ManyToOne
+    @JoinColumn(name = "sale_id")
+    private SaleEntity sale;
 
-    @Column(name = "email")
-    private String email;
+    @Column(name = "total_price")
+    private double totalPrice;
+
+    @Column(name = "count")
+    private double count;
 
 }

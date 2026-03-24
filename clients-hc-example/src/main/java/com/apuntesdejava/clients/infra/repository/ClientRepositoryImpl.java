@@ -7,14 +7,15 @@ import com.apuntesdejava.clients.infra.mapper.ClientMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import lombok.extern.java.Log;
+import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.Optional;
 
 @ApplicationScoped
-@Log
 public class ClientRepositoryImpl implements ClientRepository {
+
+    private final static Logger LOGGER = Logger.getLogger(ClientRepositoryImpl.class);
 
     private final ClientMapper clientMapper;
 
@@ -29,9 +30,9 @@ public class ClientRepositoryImpl implements ClientRepository {
     @Override
     @Transactional
     public Client save(Client client) {
-        log.info("-- Saving model: " + client);
+        LOGGER.infof("-- Saving model: %s" , client);
         var entity = clientMapper.modelToEntity(client);
-        log.info("** Saving entity: " + entity);
+        LOGGER.infof("** Saving entity: %s" , entity);
         clientEntityRepository.persist(entity);
         return clientMapper.entityToModel(entity);
     }
@@ -39,6 +40,7 @@ public class ClientRepositoryImpl implements ClientRepository {
     @Override
     public List<Client> findAll() {
         return clientEntityRepository.streamAll()
+//            .peek(entity -> LOGGER.infof("found: %s",entity))
             .map(clientMapper::entityToModel)
             .toList();
     }
@@ -46,6 +48,7 @@ public class ClientRepositoryImpl implements ClientRepository {
     @Override
     public Optional<Client> findById(Integer id) {
         return clientEntityRepository.findByIdOptional(id)
+
             .map(clientMapper::entityToModel);
     }
 }

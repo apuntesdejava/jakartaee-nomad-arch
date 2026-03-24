@@ -2,3 +2,5 @@
 **/.idea
 **/*.iml
 **/nb-configuration.xml
+**/.agent
+**/*-REPORT.md

@@ -1,0 +1,10 @@
+name: LOCAL
+variables:
+  - name: clientBaseUrl
+    value: http://localhost:8090/clients/api
+  - name: productBaseUrl
+    value: http://localhost:8080/products/api
+  - name: saleBaseUrl
+    value: http://localhost:8070/sales-app/resources
+  - name: SALES_HOST
+    value: http://localhost:8070

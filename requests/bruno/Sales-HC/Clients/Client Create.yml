@@ -1,0 +1,23 @@
+info:
+  name: Client Create
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{clientBaseUrl}}/client"
+  body:
+    type: json
+    data: |-
+      {
+        "firstName":"{{$randomFirstName}}",
+        "lastName":"{{$randomLastName}}",
+        "email":"{{$randomEmail}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

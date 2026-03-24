@@ -8,6 +8,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
 
@@ -22,17 +23,26 @@ public class ClientResource {
     private ClientRepository clientRepository;
 
     @GET
-    public Response findAll(){
+    public Response findAll() {
         return Response.ok(
             clientRepository.findAll()
         ).build();
     }
 
     @POST
-    public Response create(Client client){
+    public Response create(Client client) {
         var created = clientRepository.save(client);
         return Response.status(Response.Status.CREATED)
             .entity(created)
             .build();
+    }
+
+    @GET
+    @Path("{id}")
+    public Response findById(@PathParam("id") Integer id) {
+        return clientRepository.findById(id)
+            .map(client -> Response.ok(client).build())
+            .orElseGet(() -> Response.status(Response.Status.NOT_FOUND).build());
+
     }
 }

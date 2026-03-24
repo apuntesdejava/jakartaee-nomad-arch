@@ -5,7 +5,7 @@
 
     <groupId>com.apuntesdejava</groupId>
     <artifactId>sales-hc-example</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.0.1</version>
     <packaging>war</packaging>
 
     <name>sales-hc-example</name>
@@ -18,6 +18,7 @@
         <org.mapstruct.version>1.7.0.Beta1</org.mapstruct.version>
         <lombok.version>1.18.42</lombok.version>
         <h2.version>2.4.240</h2.version>
+        <mariadb.version>3.5.7</mariadb.version>
     </properties>
 
     <dependencyManagement>
@@ -44,6 +45,11 @@
             <artifactId>microprofile</artifactId>
             <scope>provided</scope>
             <type>pom</type>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.microprofile.health</groupId>
+            <artifactId>microprofile-health-api</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>fish.payara.api</groupId>
@@ -192,6 +198,14 @@
         </profile>
         <profile>
             <id>prod</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.mariadb.jdbc</groupId>
+                    <artifactId>mariadb-java-client</artifactId>
+                    <version>${mariadb.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
             <build>
                 <plugins>
                     <plugin>
@@ -210,7 +224,7 @@
                         <configuration>
                             <images>
                                 <image>
-                                    <name>${project.artifactId}:${project.version}</name>
+                                    <name>payara/${project.artifactId}:${project.version}</name>
                                 </image>
                             </images>
                         </configuration>

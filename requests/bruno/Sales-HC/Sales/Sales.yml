@@ -1,0 +1,55 @@
+info:
+  name: Sales
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{saleBaseUrl}}/sale"
+  body:
+    type: json
+    data: |-
+      {
+        "clientId": {{clientId}},
+        "totalPrice": 0,
+        "details": [
+          {
+            "productId": {{productId1}},
+            "count": {{$randomInt}}
+          },
+          {
+            "productId": {{productId2}},
+            "count": {{$randomInt}}
+          }
+        ]
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const MIN_CLIENT_ID=1;
+        const MAX_CLIENT_ID=10;
+
+        const MIN_PRODUCT_ID=1;
+        const MAX_PRODUCT_ID=10;
+
+
+        let clientId = Math.floor(Math.random() * (MAX_CLIENT_ID - MIN_CLIENT_ID + 1)) + MIN_CLIENT_ID;
+
+        bru.setEnvVar("clientId", clientId);
+
+        let productId1 = Math.floor(Math.random() * (MAX_PRODUCT_ID - MIN_PRODUCT_ID + 1)) + MIN_PRODUCT_ID;
+
+        bru.setEnvVar("productId1", productId1);
+
+        let productId2 = Math.floor(Math.random() * (MAX_PRODUCT_ID - MIN_PRODUCT_ID + 1)) + MIN_PRODUCT_ID;
+
+        bru.setEnvVar("productId2", productId2);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

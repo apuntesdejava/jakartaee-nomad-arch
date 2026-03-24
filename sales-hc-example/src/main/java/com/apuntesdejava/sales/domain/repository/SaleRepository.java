@@ -12,4 +12,6 @@ public interface SaleRepository {
     List<Sale> findAll();
 
     Optional<Sale> findById(Integer id);
+
+    void updateSalePrice(Integer id, Double salePrice);
 }

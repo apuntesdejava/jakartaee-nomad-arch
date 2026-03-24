@@ -1,0 +1,52 @@
+GET {{clientBaseUrl}}/client
+###
+GET {{clientBaseUrl}}/client/1
+###
+POST {{clientBaseUrl}}/client
+Content-Type: application/json
+
+{
+ "firstName": "Albert",
+  "lastName": "Anton",
+  "email": "albert@gmail.com"
+}
+
+###
+GET {{productBaseUrl}}/product
+###
+POST {{productBaseUrl}}/product
+Content-Type: application/json
+
+{
+  "name": "Teclado",
+  "price": 100
+}
+###
+POST {{productBaseUrl}}/product
+Content-Type: application/json
+
+{
+  "name": "Mouse",
+  "price": 50
+}
+###
+GET {{saleBaseUrl}}/sale
+
+###
+POST {{saleBaseUrl}}/sale
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "totalPrice": 11,
+  "details": [
+    {
+      "productId": 1,
+      "count": 11
+    },
+    {
+      "productId": 2,
+      "count": 11
+    }
+  ]
+}

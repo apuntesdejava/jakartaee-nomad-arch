@@ -1,0 +1,22 @@
+info:
+  name: Product Create
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{productBaseUrl}}/product"
+  body:
+    type: json
+    data: |-
+      {
+        "name":"{{$randomProduct}}",
+        "price":"{{$randomPrice}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

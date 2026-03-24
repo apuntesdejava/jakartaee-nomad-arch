@@ -6,13 +6,13 @@ import com.apuntesdejava.sales.domain.repository.SaleRepository;
 import com.apuntesdejava.sales.infra.mapper.SaleMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import lombok.extern.java.Log;
 
 import java.util.List;
 import java.util.Optional;
 
 @ApplicationScoped
-@Transactional
+@Log
 public class SaleRepositoryImpl implements SaleRepository {
 
     @Inject
@@ -31,14 +31,20 @@ public class SaleRepositoryImpl implements SaleRepository {
     @Override
     public List<Sale> findAll() {
         return saleEntityRepository
-            .findAll()
-            .map(saleMapper::entityToModel)
-            .toList();
+                .findAll()
+                .map(saleMapper::entityToModel)
+                .toList();
     }
 
     @Override
     public Optional<Sale> findById(Integer id) {
         return saleEntityRepository.findById(id)
-            .map(saleMapper::entityToModel);
+                .map(saleMapper::entityToModel);
+    }
+
+    @Override
+    public void updateSalePrice(Integer id, Double salePrice) {
+        saleEntityRepository.updateSalePrice(id, salePrice);
+
     }
 }
