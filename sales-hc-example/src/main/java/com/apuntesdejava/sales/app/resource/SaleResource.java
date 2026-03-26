@@ -9,12 +9,14 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
+import lombok.extern.java.Log;
 
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 
 @Path("sale")
 @Produces(APPLICATION_JSON)
 @Consumes(APPLICATION_JSON)
+@Log
 public class SaleResource {
 
     @Inject
@@ -30,6 +32,7 @@ public class SaleResource {
 
     @POST
     public Response sale(Sale request) {
+        log.info("Request:" + request);
         saleService.sale(request);
         return Response.ok().build();
     }

@@ -11,6 +11,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
+import org.jboss.logging.Logger;
 
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 
@@ -18,6 +19,7 @@ import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 @Produces(APPLICATION_JSON)
 @Consumes(APPLICATION_JSON)
 public class ClientResource {
+    private static final Logger LOGGER = Logger.getLogger(ClientResource.class);
 
     @Inject
     private ClientRepository clientRepository;
@@ -40,6 +42,7 @@ public class ClientResource {
     @GET
     @Path("{id}")
     public Response findById(@PathParam("id") Integer id) {
+        LOGGER.infof("findById:%s", id);
         return clientRepository.findById(id)
             .map(client -> Response.ok(client).build())
             .orElseGet(() -> Response.status(Response.Status.NOT_FOUND).build());

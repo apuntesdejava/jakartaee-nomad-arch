@@ -13,6 +13,7 @@ job "sales-scalable" {
       config {
         image = "fabiolb/fabio:1.6.11"
         ports = ["lb", "ui"]
+        args = ["-proxy.addr=:9999", "-ui.addr=:9998"]
       }
       env {
         FABIO_REGISTRY_CONSUL_ADDR     = "${attr.unique.network.ip-address}:8500"
@@ -23,10 +24,9 @@ job "sales-scalable" {
         memory = 128
       }
       service {
-        name         = "fabio-ui"
-        port         = "ui"
+        name = "fabio-ui"
+        port = "ui"
         tags = ["fabio-ui"]
-        address_mode = "host"
 
         check {
           type     = "http"
@@ -184,7 +184,6 @@ job "sales-scalable" {
     count = 1
 
     network {
-      # Eliminamos mode = "bridge" para evitar el bloqueo de asignación
       port "http" {
         to = 8080
       }
@@ -221,15 +220,14 @@ job "sales-scalable" {
       template {
         destination = "local/post-boot-commands.asadmin"
         change_mode = "restart"
-        # Mantenemos el Consul Template para encontrar MariaDB
         data        = <<EOH
 # Crear Pool de conexiones a Base de Datos
 create-jdbc-connection-pool --datasourceclassname org.mariadb.jdbc.MariaDbDataSource --restype javax.sql.DataSource --property user=sales:password=sales:url="jdbc:mariadb://{{ range service "mariadb" }}{{ .Address }}:{{ .Port }}{{ end }}/sales" salesPool
 create-jdbc-resource --connectionpoolid salesPool jdbc/sales
 
-# Configurar Clientes REST usando Fabio
-set-config-property --name=com.apuntesdejava.sales.services.ProductService/mp-rest/url --value="http://{{ env "attr.unique.network.ip-address" }}:9999/products/api"
-set-config-property --name=com.apuntesdejava.sales.services.ClientService/mp-rest/url --value="http://{{ env "attr.unique.network.ip-address" }}:9999/clients/api"
+# Configurar Clientes REST via Consul Service Discovery
+set-config-property --source=domain --propertyName=com.apuntesdejava.sales.services.ProductService/mp-rest/url --propertyValue=http://{{ range service "products-api" }}{{ .Address }}:{{ .Port }}{{ end }}/products/api
+set-config-property --source=domain --propertyName=com.apuntesdejava.sales.services.ClientService/mp-rest/url --propertyValue=http://{{ range service "clients-api" }}{{ .Address }}:{{ .Port }}{{ end }}/clients/api
 EOH
       }
 
