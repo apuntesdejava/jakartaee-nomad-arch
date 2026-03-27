@@ -26,16 +26,16 @@ public class SaleResource {
     public Response findAll() {
         var sales = saleService.findAll();
         return Response
-            .ok(sales)
-            .build();
+                .ok(sales)
+                .build();
     }
 
     @POST
     public Response sale(Sale request) {
         log.info("Request:" + request);
-        saleService.sale(request);
-        return Response.ok().build();
+        var sale = saleService.sale(request);
+        return sale.map(s -> Response.status(Response.Status.CREATED).entity(s).build())
+                .orElse(Response.status(Response.Status.BAD_REQUEST).build());
     }
-
 
 }

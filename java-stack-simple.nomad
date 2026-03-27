@@ -1,42 +1,25 @@
-job "sales-scalable" {
+job "java-stack-simple" {
   datacenters = ["dc1"]
 
-  #GRUPO 0: Balanceador
-  group "loadbalancer" {
-    count = 1
+  # 1. FABIO COMO API GATEWAY (Puerto único 8080)
+/*  group "api-gateway" {
     network {
-      port "lb" { static = 9999 }
-      port "ui" { static = 9998 }
+      port "http" { static = 8080 } # Todo el tráfico entra por aquí
+      port "ui"   { static = 9998 }
     }
     task "fabio" {
       driver = "docker"
       config {
         image = "fabiolb/fabio:1.6.11"
-        ports = ["lb", "ui"]
-        args = ["-proxy.addr=:9999", "-ui.addr=:9998"]
+        ports = ["http", "ui"]
+        # Fabio escucha en el 8080 para las apps
+        args  = ["-proxy.addr=:8080", "-ui.addr=:9998"]
       }
       env {
-        FABIO_REGISTRY_CONSUL_ADDR     = "${attr.unique.network.ip-address}:8500"
-        FABIO_REGISTRY_CONSUL_REGISTER = "false"
-      }
-      resources {
-        cpu    = 200
-        memory = 128
-      }
-      service {
-        name = "fabio-ui"
-        port = "ui"
-        tags = ["fabio-ui"]
-
-        check {
-          type     = "http"
-          path     = "/health"
-          interval = "10s"
-          timeout  = "2s"
-        }
+        FABIO_REGISTRY_CONSUL_ADDR = "${attr.unique.network.ip-address}:8500"
       }
     }
-  }
+  }*/
 
   # GRUPO 1: Base de Datos
   group "database" {
@@ -90,7 +73,7 @@ job "sales-scalable" {
     }
   }
 
-  # GRUPO 2: API Quarkus Products
+  # 2. MICROSERVICIO QUARKUS (Products)
   group "products-grp" {
     count = 1
 
@@ -134,6 +117,7 @@ job "sales-scalable" {
       }
     }
   }
+
   # GRUPO 3: API Quarkus Clients
   group "clients-grp" {
     count = 1

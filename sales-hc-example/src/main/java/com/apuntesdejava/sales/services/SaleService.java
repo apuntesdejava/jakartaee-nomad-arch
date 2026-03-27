@@ -11,6 +11,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Level;
 
@@ -32,31 +33,32 @@ public class SaleService {
     @RestClient
     private ClientService clientService;
 
-    public void sale(Sale sale) {
+    public Optional<Sale> sale(Sale sale) {
         log.log(Level.INFO, "clientId:{0}", sale.clientId());
         clientService.findById(sale.clientId()); // verify client exists
 
         var saleModel = new Sale(0, LocalDateTime.now(),
-            sale.clientId(), sale.totalPrice(), Set.of());
+                sale.clientId(), sale.totalPrice(), Set.of());
 
         var saleSaved = saleRepository.save(saleModel);
         log.log(Level.INFO, "sale saved:{0}", saleSaved);
 
         var details = sale.details()
-            .stream()
-            .map(saleDetail -> {
-                var product = productService.findById(saleDetail.productId());
-                return new SaleDetail(product.id(),
-                    saleDetail.count(),
-                    product.price() * saleDetail.count(),
-                    saleSaved);
-            }).toList();
+                .stream()
+                .map(saleDetail -> {
+                    var product = productService.findById(saleDetail.productId());
+                    return new SaleDetail(product.id(),
+                            saleDetail.count(),
+                            product.price() * saleDetail.count(),
+                            saleSaved);
+                }).toList();
         saleDetailRepository.saveAll(details);
 
         var saleTotal = details.stream()
-            .mapToDouble(SaleDetail::totalPrice)
-            .sum();
+                .mapToDouble(SaleDetail::totalPrice)
+                .sum();
         saleRepository.updateSalePrice(saleSaved.id(), saleTotal);
+        return saleRepository.findById(saleSaved.id());
 
     }
 
