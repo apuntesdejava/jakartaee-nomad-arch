@@ -1,0 +1,180 @@
+# .github/workflows/build-and-deploy.yml
+name: Build and Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:  # permite ejecutarlo manualmente desde GitHub
+
+env:
+  ACR_NAME: ${{ secrets.ACR_NAME }}           # ej: quarkuspaayaraacr
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }} # ej: quarkuspayaraacr.azurecr.io
+  NOMAD_HOST: ${{ secrets.NOMAD_HOST }}        # IP pública de la VM Azure
+  SSH_USER: azureuser
+
+jobs:
+
+  # ── Job 1: Build clients (Quarkus) ──────────────────────────
+  build-clients:
+    name: Build clients-hc-example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: maven
+
+      - name: Build + imagen Docker
+        working-directory: clients-hc-example
+        run: mvn package -Pprod -DskipTests
+
+      - name: Push a ACR
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login $ACR_LOGIN_SERVER \
+            -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+
+          docker tag quarkus/clients-hc-example-jvm:0.0.1 \
+            $ACR_LOGIN_SERVER/clients-hc-example-jvm:0.0.1
+
+          docker tag quarkus/clients-hc-example-jvm:0.0.1 \
+            $ACR_LOGIN_SERVER/clients-hc-example-jvm:${{ github.sha }}
+
+          docker push $ACR_LOGIN_SERVER/clients-hc-example-jvm:0.0.1
+          docker push $ACR_LOGIN_SERVER/clients-hc-example-jvm:${{ github.sha }}
+
+  # ── Job 2: Build products (Quarkus) ─────────────────────────
+  build-products:
+    name: Build products-hc-example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: maven
+
+      - name: Build + imagen Docker
+        working-directory: products-hc-example
+        run: mvn package -Pprod -DskipTests
+
+      - name: Push a ACR
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login $ACR_LOGIN_SERVER \
+            -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+
+          docker tag quarkus/products-hc-example-jvm:0.0.1 \
+            $ACR_LOGIN_SERVER/products-hc-example-jvm:0.0.1
+
+          docker tag quarkus/products-hc-example-jvm:0.0.1 \
+            $ACR_LOGIN_SERVER/products-hc-example-jvm:${{ github.sha }}
+
+          docker push $ACR_LOGIN_SERVER/products-hc-example-jvm:0.0.1
+          docker push $ACR_LOGIN_SERVER/products-hc-example-jvm:${{ github.sha }}
+
+  # ── Job 3: Build sales (Payara) ──────────────────────────────
+  build-sales:
+    name: Build sales-hc-example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: maven
+
+      - name: Build + imagen Docker
+        working-directory: sales-hc-example
+        run: mvn package -Pprod -DskipTests
+
+      - name: Push a ACR
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login $ACR_LOGIN_SERVER \
+            -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+
+          docker tag payara/sales-hc-example:0.0.1 \
+            $ACR_LOGIN_SERVER/sales-hc-example:0.0.1
+
+          docker tag payara/sales-hc-example:0.0.1 \
+            $ACR_LOGIN_SERVER/sales-hc-example:${{ github.sha }}
+
+          docker push $ACR_LOGIN_SERVER/sales-hc-example:0.0.1
+          docker push $ACR_LOGIN_SERVER/sales-hc-example:${{ github.sha }}
+
+  # ── Job 4: Deploy a Nomad (espera los 3 builds) ─────────────
+  deploy:
+    name: Deploy a Azure
+    runs-on: ubuntu-latest
+    needs: [build-clients, build-products, build-sales]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Nomad CLI
+        run: |
+          curl -fsSL https://releases.hashicorp.com/nomad/1.11.3/nomad_1.11.3_linux_amd64.zip \
+            -o /tmp/nomad.zip
+          unzip -q /tmp/nomad.zip -d /tmp
+          sudo install -m 755 /tmp/nomad /usr/local/bin/nomad
+
+      - name: Instalar Consul CLI
+        run: |
+          curl -fsSL https://releases.hashicorp.com/consul/1.22.6/consul_1.22.6_linux_amd64.zip \
+            -o /tmp/consul.zip
+          unzip -q /tmp/consul.zip -d /tmp
+          sudo install -m 755 /tmp/consul /usr/local/bin/consul
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $NOMAD_HOST >> ~/.ssh/known_hosts
+
+      - name: Aplicar config entries de Consul
+        env:
+          CONSUL_HTTP_ADDR: http://${{ secrets.NOMAD_HOST }}:8500
+        run: |
+          consul config write infra/consul/api-gateway.hcl
+          consul config write infra/consul/http-route.hcl
+          consul config write infra/consul/intention-products.hcl
+          consul config write infra/consul/intention-clients.hcl
+          consul config write infra/consul/intention-sales.hcl
+
+      - name: Deploy jobs a Nomad
+        env:
+          NOMAD_ADDR: http://${{ secrets.NOMAD_HOST }}:4646
+        run: |
+          nomad job run \
+            -var="registry=$ACR_LOGIN_SERVER" \
+            -var="network_mode=bridge" \
+            -var="instance_count=1" \
+            infra/nomad/clients.nomad
+
+          nomad job run \
+            -var="registry=$ACR_LOGIN_SERVER" \
+            -var="network_mode=bridge" \
+            -var="instance_count=1" \
+            infra/nomad/products.nomad
+
+          nomad job run \
+            -var="registry=$ACR_LOGIN_SERVER" \
+            -var="network_mode=bridge" \
+            -var="instance_count=1" \
+            infra/nomad/sales.nomad
+
+          nomad job run infra/nomad/api-gateway.nomad
+
+      - name: Verificar deployments
+        env:
+          NOMAD_ADDR: http://${{ secrets.NOMAD_HOST }}:4646
+        run: |
+          echo "── Estado de los jobs:"
+          nomad job status clients-backend
+          nomad job status products-backend
+          nomad job status sales-frontend
