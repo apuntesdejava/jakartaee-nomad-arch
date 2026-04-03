@@ -6,7 +6,7 @@ job "api-gateway" {
     count = 1
 
     network {
-      mode = "bridge"
+      mode = var.network_mode
       port "public" {
         static = 8080
         to     = 8080
@@ -24,4 +24,9 @@ job "api-gateway" {
       }
     }
   }
+}
+
+variable "network_mode" {
+  type    = string
+  default = "host"
 }

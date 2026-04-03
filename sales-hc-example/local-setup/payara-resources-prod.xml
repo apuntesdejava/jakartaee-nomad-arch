@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE resources PUBLIC
+        "-//GlassFish.org//DTD GlassFish Application Server 3.1 Resource Definitions//EN"
+        "http://glassfish.java.net/dtd/glassfish-resources_1_5.dtd">
+<resources>
+    <jdbc-connection-pool
+            name="sales-pool"
+            datasource-classname="com.mysql.cj.jdbc.MysqlDataSource"
+            res-type="javax.sql.DataSource">
+        <property name="url"      value="${ENV=JDBC_URL}"/>
+        <property name="user"     value="${ENV=DB_USER}"/>
+        <property name="password" value="${ENV=DB_PASSWORD}"/>
+    </jdbc-connection-pool>
+
+    <jdbc-resource
+            jndi-name="jdbc/sales"
+            pool-name="sales-pool"/>
+</resources>

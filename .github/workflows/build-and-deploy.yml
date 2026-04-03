@@ -177,4 +177,4 @@ jobs:
           echo "── Estado de los jobs:"
           nomad job status clients-backend
           nomad job status products-backend
-          nomad job status sales-frontend
+          nomad job status sales-backend

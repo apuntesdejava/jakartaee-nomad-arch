@@ -1,5 +1,5 @@
 Kind = "service-intentions"
-Name = "sales-frontend"
+Name = "sales-backend"
 Sources = [
   {
     Name   = "api-gateway"

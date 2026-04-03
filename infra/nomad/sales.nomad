@@ -1,34 +1,26 @@
-job "sales-frontend" {
+variable "project_root" {
+  type    = string
+  default = ""
+}
+
+job "sales-backend" {
   datacenters = ["dc1"]
   type        = "service"
 
   group "web" {
-    count = 1
+    count = var.instance_count
 
     network {
-      mode = "bridge"
-      port "http" { to = 8080 }  # puerto de Payara Micro
+      mode = var.network_mode
+      port "http" {
+        static = var.network_mode == "host" ? 8083 : 0
+        to     = 8080
+      }
     }
 
     service {
-      name = "sales-frontend"
+      name = "sales-backend"
       port = "http"
-
-      connect {
-        sidecar_service {
-          proxy {
-            # Puertos internos alejados del 8080 de Payara para evitar conflicto
-            upstreams {
-              destination_name = "products-backend"
-              local_bind_port  = 19080
-            }
-            upstreams {
-              destination_name = "clients-backend"
-              local_bind_port  = 19090
-            }
-          }
-        }
-      }
 
       check {
         type     = "http"
@@ -41,21 +33,51 @@ job "sales-frontend" {
     task "sales" {
       driver = "docker"
 
+      vault {
+        policies = ["nomad-cluster"]
+      }
+
+      # Obtenemos la configuración dinámicamente desde Consul KV
+      template {
+        data            = "[[ key \"configs/payara-resources\" ]]"
+        destination     = "local/payara-resources.xml"
+        left_delimiter  = "[["
+        right_delimiter = "]]"
+      }
+
+      template {
+        data = <<EOH
+DB_USER="{{ with secret "kv/data/mysql" }}{{ .Data.data.user }}{{ end }}"
+DB_PASSWORD="{{ with secret "kv/data/mysql" }}{{ .Data.data.password }}{{ end }}"
+JDBC_URL="{{ with secret "kv/data/mysql" }}{{ .Data.data.url }}{{ end }}"
+EOH
+        destination = "local/secrets.env"
+        env         = true
+      }
+
+      # El comando es una sola línea, lo generamos aquí para garantizar la ruta /local
+      template {
+        data        = "add-resources /local/payara-resources.xml"
+        destination = "local/post-boot.txt"
+      }
+
       config {
         image = var.registry != "" ? "${var.registry}/sales-hc-example:0.0.1" : "payara/sales-hc-example:0.0.1"
         ports = ["http"]
+        args  = [
+          "--postbootcommandfile", "/local/post-boot.txt",
+          "--deploymentDir", "/opt/payara/deployments"
+        ]
       }
 
       env {
-        # Override de microprofile-config.properties via env vars (MicroProfile Config spec)
-        # Envoy sidecar escucha en estos puertos locales y enruta al servicio real
-        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = "http://localhost:19080/products/api"
-        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = "http://localhost:19090/clients/api"
+        # En host mode apunta a los puertos estáticos directos
+        # En bridge mode apunta a los upstreams de Envoy
+        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = var.network_mode == "host" ? "http://localhost:8082/products/api" : "http://localhost:19080/products/api"
+        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = var.network_mode == "host" ? "http://localhost:8081/clients/api"   : "http://localhost:19090/clients/api"
 
-        JDBC_URL    = "jdbc:mysql://host.docker.internal:3306/appdb"
-
-        DB_USER     = "appuser"
-        DB_PASSWORD = "apppass"
+        # Puerto de Payara según el modo
+        PAYARA_ARGS = var.network_mode == "host" ? "--port 8083" : "--port 8080"
       }
 
       resources {
@@ -69,4 +91,14 @@ job "sales-frontend" {
 variable "registry" {
   type    = string
   default = ""
+}
+
+variable "network_mode" {
+  type    = string
+  default = "host"
+}
+
+variable "instance_count" {
+  type    = number
+  default = 1
 }

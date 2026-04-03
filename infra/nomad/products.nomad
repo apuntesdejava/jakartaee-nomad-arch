@@ -1,13 +1,21 @@
+variable "project_root" {
+  type    = string
+  default = ""
+}
+
 job "products-backend" {
   datacenters = ["dc1"]
-  type = "service"
+  type        = "service"
 
   group "api" {
-    count = 1
+    count = var.instance_count
 
     network {
-      mode = "host"
-      port "http" { to = 8082 }
+      mode = var.network_mode
+      port "http" {
+        static = var.network_mode == "host" ? 8082 : 0
+        to     = 8080
+      }
     }
 
     service {
@@ -22,27 +30,37 @@ job "products-backend" {
       }
     }
 
-    task "clients" {
+    task "products" {
       driver = "docker"
 
+      vault {
+        policies = ["nomad-cluster"]
+      }
+
+      template {
+        data = <<EOH
+QUARKUS_DATASOURCE_USERNAME="{{ with secret "kv/data/mysql" }}{{ .Data.data.user }}{{ end }}"
+QUARKUS_DATASOURCE_PASSWORD="{{ with secret "kv/data/mysql" }}{{ .Data.data.password }}{{ end }}"
+QUARKUS_DATASOURCE_JDBC_URL="{{ with secret "kv/data/mysql" }}{{ .Data.data.url }}{{ end }}"
+EOH
+        destination = "local/secrets.env"
+        env         = true
+      }
+
       config {
-        # En local: imagen local. En Azure: tu ACR
         image = var.registry != "" ? "${var.registry}/products-hc-example-jvm:0.0.1" :           "quarkus/products-hc-example-jvm:0.0.1"
         ports = ["http"]
       }
 
       env {
-        QUARKUS_HTTP_PORT           = "8082"
+        QUARKUS_HTTP_PORT           = "8080"
         QUARKUS_DATASOURCE_DB_KIND  = "mysql"
-        QUARKUS_DATASOURCE_JDBC_URL = "jdbc:mysql://host.docker.internal:3306/appdb"
-        QUARKUS_DATASOURCE_USERNAME = "appuser"
-        QUARKUS_DATASOURCE_PASSWORD = "apppass"
         JAVA_OPTS_APPEND            = "-Dquarkus.http.host=0.0.0.0"
       }
 
       resources {
         cpu    = 500
-        memory = 384   # Quarkus JVM arranca en ~256MB
+        memory = 384
       }
     }
   }
@@ -50,5 +68,15 @@ job "products-backend" {
 
 variable "registry" {
   type    = string
-  default = ""  # vacío = imagen local
+  default = ""
+}
+
+variable "network_mode" {
+  type    = string
+  default = "host"
+}
+
+variable "instance_count" {
+  type    = number
+  default = 1
 }

@@ -2,7 +2,7 @@ Kind = "service-intentions"
 Name = "products-backend"
 Sources = [
   {
-    Name   = "sales-frontend"
+    Name   = "sales-backend"
     Action = "allow"
   },
   {

@@ -12,7 +12,7 @@ Rules = [
   # Payara Sales — entrada principal
   {
     Matches  = [{ Path = { Match = "prefix", Value = "/sales" } }]
-    Services = [{ Name = "sales-frontend" }]
+    Services = [{ Name = "sales-backend" }]
   },
   # Quarkus Products — acceso directo (ej. para backoffice/admin)
   {
