@@ -54,7 +54,7 @@ EOH
       }
 
       env {
-        QUARKUS_HTTP_PORT           = "8080"
+        QUARKUS_HTTP_PORT           = "${NOMAD_PORT_http}"
         QUARKUS_DATASOURCE_DB_KIND  = "mysql"
         JAVA_OPTS_APPEND            = "-Dquarkus.http.host=0.0.0.0"
       }
