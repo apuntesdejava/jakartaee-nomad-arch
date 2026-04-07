@@ -4,7 +4,7 @@ Name = "main-gateway"
 Listeners = [
   {
     Name     = "http"
-    Port     = 8080
+    Port     = 8000
     Protocol = "http"
   }
 ]

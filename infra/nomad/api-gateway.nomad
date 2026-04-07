@@ -1,32 +1,35 @@
 job "api-gateway" {
   datacenters = ["dc1"]
-  type        = "service"
+  type        = "system"
 
-  group "gateway" {
-    count = 1
-
+  group "fabio" {
     network {
-      mode = var.network_mode
-      port "public" {
-        static = 8080
-        to     = 8080
+      mode = "host"
+      port "lb" {
+        static = 8000
+      }
+      port "ui" {
+        static = 9998
       }
     }
 
-    service {
-      name = "api-gateway"
-      port = "public"
+    task "fabio" {
+      driver = "docker"
+      
+      config {
+        image = "fabiolb/fabio:1.7.0"
+        ports = ["lb", "ui"]
+      }
 
-      connect {
-        gateway {
-          proxy {}
-        }
+      env {
+        FABIO_REGISTRY_CONSUL_ADDR = "${attr.unique.network.ip-address}:8500"
+        FABIO_PROXY_ADDR = ":8000"
+      }
+
+      resources {
+        cpu    = 200
+        memory = 128
       }
     }
   }
-}
-
-variable "network_mode" {
-  type    = string
-  default = "host"
 }

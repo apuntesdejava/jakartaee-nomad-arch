@@ -21,6 +21,7 @@ job "products-backend" {
     service {
       name = "products-backend"
       port = "http"
+      tags = ["urlprefix-/products"]
 
       check {
         type     = "http"
