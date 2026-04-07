@@ -18,6 +18,13 @@ if ! docker info &>/dev/null; then
   exit 1
 fi
 
+echo "── Limpiando procesos anteriores en segundo plano..."
+pkill -f "consul agent" || true
+pkill -f "nomad agent" || true
+pkill -f "vault server" || true
+sleep 2
+
+
 # ── 1. MySQL ─────────────────────────────────────────────────
 echo "── 1. Levantando MySQL con Docker Compose..."
 docker compose -f "$INFRA_DIR/compose.yaml" up -d
@@ -51,6 +58,7 @@ echo "── 3. Arrancando Consul..."
 consul agent -dev \
   -node=local-node \
   -bind=127.0.0.1 \
+  -client=0.0.0.0 \
   > /tmp/consul.log 2>&1 &
 
 echo "── Esperando que Consul esté listo..."
@@ -88,17 +96,14 @@ bash "$SCRIPT_DIR/setup-vault.sh"
 
 # ── 5. Config entries de Consul ──────────────────────────────
 echo "── 5. Configurando Consul..."
-consul config write "$INFRA_DIR/consul/api-gateway.hcl"
-consul config write "$INFRA_DIR/consul/http-route.hcl"
-consul config write "$INFRA_DIR/consul/intentions-clients.hcl"
-consul config write "$INFRA_DIR/consul/intentions-products.hcl"
-consul config write "$INFRA_DIR/consul/intentions-sales.hcl"
+# (Se eliminaron las antiguas reglas de API Gateway porque ahora usamos Fabio zero-conf)
 
 # ── 6. Jobs Nomad ────────────────────────────────────────────
 echo "── 6. Desplegando jobs..."
 nomad job run -var "project_root=$PROJECT_ROOT" "$INFRA_DIR/nomad/clients.nomad"
 nomad job run -var "project_root=$PROJECT_ROOT" "$INFRA_DIR/nomad/products.nomad"
 nomad job run -var "project_root=$PROJECT_ROOT" "$INFRA_DIR/nomad/sales.nomad"
+nomad job run "$INFRA_DIR/nomad/api-gateway.nomad"
 
 # ── Listo ────────────────────────────────────────────────────
 echo ""
@@ -106,6 +111,7 @@ echo "✓ Stack listo (modo local con Vault)"
 echo "  clients:   http://localhost:8081/clients/api"
 echo "  products:  http://localhost:8082/products/api"
 echo "  sales:     http://localhost:8083"
+echo "  Gateway:   http://localhost:8000"
 echo "  Vault UI:  http://localhost:8200 (token: root)"
 echo "  Nomad UI:  http://localhost:4646"
 echo "  Consul UI: http://localhost:8500"

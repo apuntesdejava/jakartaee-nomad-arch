@@ -21,6 +21,7 @@ job "sales-backend" {
     service {
       name = "sales-backend"
       port = "http"
+      tags = ["urlprefix-/sales"]
 
       check {
         type     = "http"
@@ -77,7 +78,7 @@ EOH
         COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = var.network_mode == "host" ? "http://${attr.unique.network.ip-address}:8081/clients/api"   : "http://localhost:19090/clients/api"
 
         # Puerto de Payara según el modo
-        PAYARA_ARGS = var.network_mode == "host" ? "--port 8083" : "--port 8080"
+        PAYARA_ARGS = var.network_mode == "host" ? "--port ${NOMAD_PORT_http} --nocluster" : "--port 8080 --nocluster"
       }
 
       resources {
