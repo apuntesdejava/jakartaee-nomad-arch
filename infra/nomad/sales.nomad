@@ -73,8 +73,8 @@ EOH
       env {
         # En host mode apunta a los puertos estáticos directos
         # En bridge mode apunta a los upstreams de Envoy
-        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = var.network_mode == "host" ? "http://localhost:8082/products/api" : "http://localhost:19080/products/api"
-        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = var.network_mode == "host" ? "http://localhost:8081/clients/api"   : "http://localhost:19090/clients/api"
+        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = var.network_mode == "host" ? "http://${attr.unique.network.ip-address}:8082/products/api" : "http://localhost:19080/products/api"
+        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = var.network_mode == "host" ? "http://${attr.unique.network.ip-address}:8081/clients/api"   : "http://localhost:19090/clients/api"
 
         # Puerto de Payara según el modo
         PAYARA_ARGS = var.network_mode == "host" ? "--port 8083" : "--port 8080"

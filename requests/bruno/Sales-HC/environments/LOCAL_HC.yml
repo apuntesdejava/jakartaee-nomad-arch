@@ -1,10 +1,10 @@
 name: LOCAL_HC
 variables:
   - name: productBaseUrl
-    value: http://192.168.0.133:21354/products/api
+    value: http://172.25.212.178:8082/products/api
   - name: clientBaseUrl
-    value: http://192.168.0.133:20078/clients/api
+    value: http://172.25.212.178:8081/clients/api
   - name: SALES_HOST
-    value: http://192.168.0.133:23852/
+    value: http://172.25.212.178:8083/
   - name: saleBaseUrl
-    value: http://192.168.0.133:23852/sales-app/resources
+    value: http://172.25.212.178:8083/sales/resources
