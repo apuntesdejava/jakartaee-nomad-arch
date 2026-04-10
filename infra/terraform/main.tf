@@ -30,17 +30,6 @@ resource "azurerm_subnet" "internal" {
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.0.2.0/24"]
-  service_endpoints    = ["Microsoft.Storage"]
-  
-  delegation {
-    name = "fs"
-    service_delegation {
-      name = "Microsoft.DBforMySQL/flexibleServers"
-      actions = [
-        "Microsoft.Network/virtualNetworks/subnets/join/action",
-      ]
-    }
-  }
 }
 
 # Public IP
@@ -192,11 +181,8 @@ resource "azurerm_mysql_flexible_server" "main" {
   location               = azurerm_resource_group.main.location
   administrator_login    = "appadmin"
   administrator_password = var.admin_password
-  sku_name               = "B_Gen5_1" # Basic tier para demo
-  version                = "5.7"
-  
-  # Permitir acceso desde la VM a través del NSG/VNet
-  # Para simplificar en esta demo, permitimos tráfico interno
+  sku_name               = "B_Standard_B1ms"
+  version                = "8.0.21"
 }
 
 resource "azurerm_mysql_flexible_database" "appdb" {

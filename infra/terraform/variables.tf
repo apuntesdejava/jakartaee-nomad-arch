@@ -1,23 +1,23 @@
 variable "location" {
   description = "Región de Azure"
-  type        = "string"
-  default     = "East US"
+  type        = string
+  default     = "swedencentral"
 }
 
 variable "prefix" {
   description = "Prefijo para los nombres de los recursos"
-  type        = "string"
-  default     = "nomad-jakarta"
+  type        = string
+  default     = "nomad-j"
 }
 
 variable "admin_username" {
   description = "Usuario administrador de la VM"
-  type        = "string"
+  type        = string
   default     = "azureuser"
 }
 
 variable "admin_password" {
   description = "Password para el usuario administrador y MySQL"
-  type        = "string"
+  type        = string
   sensitive   = true
 }
