@@ -16,11 +16,15 @@ else
 fi
 
 # 2. Guardar credenciales de base de datos
+DB_USER=${DB_USER:-"appuser"}
+DB_PASS=${DB_PASS:-"apppass"}
+DB_URL=${DB_URL:-"jdbc:mysql://host.docker.internal:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true"}
+
 echo "── Guardando credenciales de MySQL en kv/mysql..."
 vault kv put kv/mysql \
-    user="appuser" \
-    password="apppass" \
-    url="jdbc:mysql://host.docker.internal:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true"
+    user="$DB_USER" \
+    password="$DB_PASS" \
+    url="$DB_URL"
 
 # 3. Configurar Workload Identities (JWT Auth)
 echo "── Configurando JWT Auth para Nomad Workload Identities..."

@@ -1,0 +1,75 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - docker.io
+  - unzip
+
+runcmd:
+  # 1. Instalar HashiCorp Repo
+  - curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  - echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+  - apt-get update
+  - apt-get install -y consul nomad vault
+
+  # 2. Configurar Docker
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker azureuser
+
+  # 3. Lanzar Consul en modo Dev (escuchando en todas las interfaces)
+  - |
+    cat <<EOF > /etc/systemd/system/consul-dev.service
+    [Unit]
+    Description=Consul Dev Mode
+    After=network.target
+
+    [Service]
+    ExecStart=/usr/bin/consul agent -dev -client=0.0.0.0 -bind=0.0.0.0
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+  - systemctl enable consul-dev
+  - systemctl start consul-dev
+
+  # 4. Lanzar Nomad en modo Dev (escuchando en todas las interfaces)
+  - |
+    cat <<EOF > /etc/systemd/system/nomad-dev.service
+    [Unit]
+    Description=Nomad Dev Mode
+    After=network.target consul-dev.service
+
+    [Service]
+    ExecStart=/usr/bin/nomad agent -dev -bind=0.0.0.0 -network-interface=eth0
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+  - systemctl enable nomad-dev
+  - systemctl start nomad-dev
+
+  # 5. Lanzar Vault en modo Dev
+  - |
+    cat <<EOF > /etc/systemd/system/vault-dev.service
+    [Unit]
+    Description=Vault Dev Mode
+    After=network.target
+
+    [Service]
+    ExecStart=/usr/bin/vault server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+  - systemctl enable vault-dev
+  - systemctl start vault-dev

@@ -47,6 +47,47 @@ Para arrancar todo de golpe simplemente ejecuta la utilidad principal (que confi
 
 El script se encargará de configurar MySQL y levantar las orquestaciones. El proceso dura unos segundos (y un par extra mientrás Payara Micro calienta y Fabio registra los microservicios saludables en Consul).
 
+## ☁️ Despliegue en la Nube (Azure)
+
+Esta arquitectura está preparada para ser desplegada en **Microsoft Azure** utilizando **Terraform** para la Infraestructura como Código (IaC).
+
+### Componentes en Azure:
+- **Máquina Virtual (Ubuntu 22.04)**: Hospeda el stack de HashiCorp (Nomad, Consul, Vault) y Fabio.
+- **Azure Container Registry (ACR)**: Almacenamiento privado para las imágenes de Docker.
+- **Azure Database for MySQL (Flexible Server)**: Base de datos administrada para los microservicios.
+- **Network Security Group (NSG)**: Configuración de firewall para permitir tráfico en los puertos de gestión y el gateway (8000).
+
+### Pasos para el despliegue:
+
+#### 1. Preparar la infraestructura con Terraform
+Asegúrate de tener instalada la CLI de Azure (`az`) y haber iniciado sesión (`az login`). Luego, desde la carpeta `infra/terraform`:
+
+```bash
+cd infra/terraform
+terraform init
+terraform apply
+```
+*Nota: Se te solicitará una contraseña para el administrador de la VM y la base de datos.*
+
+#### 2. Subir imágenes al registro (ACR)
+Una vez finalizado el `apply`, Terraform mostrará los comandos necesarios en el output `push_commands`. Básicamente:
+1. Haz login en el ACR: `az acr login --name <tu_acr_name>`
+2. Etiqueta tus imágenes locales (construidas con `mvn clean package`).
+3. Súbelas con `docker push`.
+
+#### 3. Configurar Vault y Desplegar Jobs
+Usa el script de despliegue automatizado que se encargará de configurar las intenciones en Consul y lanzar los jobs en Nomad apuntando al ACR y a la base de datos de Azure:
+
+```bash
+# Configura las variables de entorno con los datos de Terraform (IP y Host DB)
+export DB_URL="jdbc:mysql://<mysql_host>:3306/appdb?useSSL=true"
+export DB_USER="appadmin"
+export DB_PASS="<tu_password>"
+
+# Ejecuta el despliegue
+./infra/scripts/deploy-azure.sh
+```
+
 ---
 
 ## 🌐 Endpoints y Dashboards
