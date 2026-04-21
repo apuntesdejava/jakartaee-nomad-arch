@@ -12,7 +12,7 @@ packages:
   - unzip
 
 runcmd:
-  # 1. Instalar HashiCorp Repo
+  # 1. Instalar HashiCorp Repository
   - curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
   - echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
   - apt-get update
@@ -23,7 +23,24 @@ runcmd:
   - systemctl start docker
   - usermod -aG docker azureuser
 
-  # 3. Lanzar Consul en modo Dev (escuchando en todas las interfaces)
+  # 3. Crear directorio para datos de MySQL
+  - mkdir -p /opt/mysql-data
+  - chmod -R 777 /opt/mysql-data
+
+  # 4. Lanzar MySQL en contenedor Docker (escuchando en todas las interfaces)
+  - |
+    docker run -d \
+      --name mysql-dev \
+      --restart unless-stopped \
+      -p 3306:3306 \
+      -e MYSQL_ROOT_PASSWORD='${mysql_root_password}' \
+      -e MYSQL_DATABASE='appdb' \
+      -e MYSQL_USER='${mysql_user}' \
+      -e MYSQL_PASSWORD='${mysql_password}' \
+      -v /opt/mysql-data:/var/lib/mysql \
+      mysql:9.6.0
+
+  # 5. Lanzar Consul en modo Dev (escuchando en todas las interfaces)
   - |
     cat <<EOF > /etc/systemd/system/consul-dev.service
     [Unit]
@@ -40,15 +57,16 @@ runcmd:
   - systemctl enable consul-dev
   - systemctl start consul-dev
 
-  # 4. Lanzar Nomad en modo Dev (escuchando en todas las interfaces)
+  # 6. Lanzar Nomad en modo Dev (escuchando en todas las interfaces)
   - |
     cat <<EOF > /etc/systemd/system/nomad-dev.service
     [Unit]
     Description=Nomad Dev Mode
-    After=network.target consul-dev.service
+    After=network.target consul-dev.service vault-dev.service
 
     [Service]
     ExecStart=/usr/bin/nomad agent -dev -bind=0.0.0.0 -network-interface=eth0
+    Environment="NOMAD_ADDR=http://127.0.0.1:4646"
     Restart=on-failure
 
     [Install]
@@ -57,7 +75,7 @@ runcmd:
   - systemctl enable nomad-dev
   - systemctl start nomad-dev
 
-  # 5. Lanzar Vault en modo Dev
+  # 7. Lanzar Vault en modo Dev
   - |
     cat <<EOF > /etc/systemd/system/vault-dev.service
     [Unit]
@@ -73,3 +91,337 @@ runcmd:
     EOF
   - systemctl enable vault-dev
   - systemctl start vault-dev
+
+  # 8. Instalar Fabio Load Balancer
+  - |
+    cd /tmp
+    curl -fsSL https://github.com/fabiolb/fabio/releases/download/v1.6.3/fabio-1.6.3-linux_amd64 -o fabio
+    chmod +x fabio
+    mv fabio /usr/local/bin/
+
+  # 9. Configurar Fabio
+  - |
+    cat <<EOF > /etc/systemd/system/fabio.service
+    [Unit]
+    Description=Fabio Load Balancer
+    After=network.target consul-dev.service
+
+    [Service]
+    ExecStart=/usr/local/bin/fabio -cfg /etc/fabio/fabio.properties
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  - mkdir -p /etc/fabio
+  - |
+    cat <<EOF > /etc/fabio/fabio.properties
+    # Fabio Configuration
+    proxy.addr = :9999
+    proxy.localip = 0.0.0.0
+
+    admin.addr = :9998
+    admin.ui.addr = :9998
+
+    registry.consul.addr = 127.0.0.1:8500
+    registry.consul.token = 
+    registry.consul.timeout = 10s
+    registry.consul.pollinterval = 5s
+    
+    log.level = info
+    EOF
+
+  - systemctl enable fabio
+  - systemctl start fabio
+
+  # 10. Crear archivos de jobs de Nomad
+  - mkdir -p /opt/nomad-jobs
+  - chmod 777 /opt/nomad-jobs
+
+  # 10a. Crear job clients.nomad
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/clients.nomad
+    variable "registry" {
+      type    = string
+      default = ""
+    }
+    
+    variable "network_mode" {
+      type    = string
+      default = "host"
+    }
+    
+    variable "instance_count" {
+      type    = number
+      default = 1
+    }
+    
+    job "clients-backend" {
+      datacenters = ["dc1"]
+      type        = "service"
+    
+      group "api" {
+        count = var.instance_count
+    
+        network {
+          mode = var.network_mode
+          port "http" {
+            static = var.network_mode == "host" ? 8081 : 0
+            to     = 8080
+          }
+        }
+    
+        service {
+          name = "clients-backend"
+          port = "http"
+          tags = ["urlprefix-/clients"]
+    
+          check {
+            type     = "http"
+            path     = "/clients/api/q/health/ready"
+            interval = "10s"
+            timeout  = "3s"
+          }
+        }
+    
+        task "clients" {
+          driver = "docker"
+    
+          config {
+            image = var.registry != "" ? "$${var.registry}/clients-hc-example-jvm:0.0.1" : "quarkus/clients-hc-example-jvm:0.0.1"
+            ports = ["http"]
+          }
+    
+          env {
+            QUARKUS_HTTP_PORT           = "$${NOMAD_PORT_http}"
+            QUARKUS_DATASOURCE_DB_KIND  = "mysql"
+            QUARKUS_DATASOURCE_USERNAME = "appuser"
+            QUARKUS_DATASOURCE_PASSWORD = "apppass123!"
+            QUARKUS_DATASOURCE_JDBC_URL = "jdbc:mysql://127.0.0.1:3306/appdb"
+            JAVA_OPTS_APPEND            = "-Dquarkus.http.host=0.0.0.0"
+          }
+    
+          resources {
+            cpu    = 500
+            memory = 384
+          }
+        }
+      }
+    }
+    EOF
+
+  # 10b. Crear job products.nomad
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/products.nomad
+    variable "registry" {
+      type    = string
+      default = ""
+    }
+    
+    variable "network_mode" {
+      type    = string
+      default = "host"
+    }
+    
+    variable "instance_count" {
+      type    = number
+      default = 1
+    }
+    
+    job "products-backend" {
+      datacenters = ["dc1"]
+      type        = "service"
+    
+      group "api" {
+        count = var.instance_count
+    
+        network {
+          mode = var.network_mode
+          port "http" {
+            static = var.network_mode == "host" ? 8082 : 0
+            to     = 8080
+          }
+        }
+    
+        service {
+          name = "products-backend"
+          port = "http"
+          tags = ["urlprefix-/products"]
+    
+          check {
+            type     = "http"
+            path     = "/products/api/q/health/ready"
+            interval = "10s"
+            timeout  = "3s"
+          }
+        }
+    
+        task "products" {
+          driver = "docker"
+    
+          config {
+            image = var.registry != "" ? "$${var.registry}/products-hc-example-jvm:0.0.1" : "quarkus/products-hc-example-jvm:0.0.1"
+            ports = ["http"]
+          }
+    
+          env {
+            QUARKUS_HTTP_PORT           = "$${NOMAD_PORT_http}"
+            QUARKUS_DATASOURCE_DB_KIND  = "mysql"
+            QUARKUS_DATASOURCE_USERNAME = "appuser"
+            QUARKUS_DATASOURCE_PASSWORD = "apppass123!"
+            QUARKUS_DATASOURCE_JDBC_URL = "jdbc:mysql://127.0.0.1:3306/appdb"
+            JAVA_OPTS_APPEND            = "-Dquarkus.http.host=0.0.0.0"
+          }
+    
+          resources {
+            cpu    = 500
+            memory = 384
+          }
+        }
+      }
+    }
+    EOF
+
+  # 10c. Crear job sales.nomad
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/sales.nomad
+    variable "registry" {
+      type    = string
+      default = ""
+    }
+    
+    variable "network_mode" {
+      type    = string
+      default = "host"
+    }
+    
+    variable "instance_count" {
+      type    = number
+      default = 1
+    }
+    
+    job "sales-backend" {
+      datacenters = ["dc1"]
+      type        = "service"
+    
+      group "web" {
+        count = var.instance_count
+    
+        network {
+          mode = var.network_mode
+          port "http" {
+            static = var.network_mode == "host" ? 8083 : 0
+            to     = 8080
+          }
+        }
+    
+        service {
+          name = "sales-backend"
+          port = "http"
+          tags = ["urlprefix-/sales"]
+    
+          check {
+            type     = "http"
+            path     = "/health"
+            interval = "10s"
+            timeout  = "5s"
+          }
+        }
+    
+        task "sales" {
+          driver = "docker"
+    
+          config {
+            image = var.registry != "" ? "$${var.registry}/sales-hc-example:0.0.1" : "payara/sales-hc-example:0.0.1"
+            ports = ["http"]
+          }
+    
+          env {
+            COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = var.network_mode == "host" ? "http://$${attr.unique.network.ip-address}:8082/products/api" : "http://localhost:19080/products/api"
+            COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = var.network_mode == "host" ? "http://$${attr.unique.network.ip-address}:8081/clients/api"   : "http://localhost:19090/clients/api"
+            PAYARA_ARGS = var.network_mode == "host" ? "--port $${NOMAD_PORT_http} --nocluster" : "--port 8080 --nocluster"
+            MYSQL_HOST = "127.0.0.1"
+            MYSQL_PORT = "3306"
+            MYSQL_DATABASE = "appdb"
+            MYSQL_USER = "appuser"
+            MYSQL_PASSWORD = "apppass123!"
+          }
+    
+          resources {
+            cpu    = 500
+            memory = 512
+          }
+        }
+      }
+    }
+    EOF
+
+  # 11. Script para esperar a que Nomad esté listo y ejecutar jobs
+  - |
+    cat <<'EOF' > /opt/setup-nomad-jobs.sh
+    #!/bin/bash
+    set -e
+    
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] Esperando a que Nomad esté listo..."
+    for i in {1..60}; do
+      if nomad status &>/dev/null; then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✓ Nomad está listo"
+        break
+      fi
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] Intento $i/60... esperando Nomad"
+      sleep 2
+    done
+    
+    sleep 5
+    
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] Desplegando jobs en Nomad..."
+    
+    # Desplegar jobs
+    nomad job run /opt/nomad-jobs/clients.nomad && \
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✓ Job 'clients-backend' desplegado" || \
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✗ Error desplegando 'clients-backend'"
+    
+    sleep 3
+    
+    nomad job run /opt/nomad-jobs/products.nomad && \
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✓ Job 'products-backend' desplegado" || \
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✗ Error desplegando 'products-backend'"
+    
+    sleep 3
+    
+    nomad job run /opt/nomad-jobs/sales.nomad && \
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✓ Job 'sales-backend' desplegado" || \
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✗ Error desplegando 'sales-backend'"
+    
+    sleep 3
+    
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✓ Todos los jobs desplegados"
+    echo "========================================"
+    nomad job status
+    echo "========================================"
+    EOF
+    chmod +x /opt/setup-nomad-jobs.sh
+
+  # 12. Crear servicio systemd para ejecutar setup de jobs después del boot
+  - |
+    cat <<'EOF' > /etc/systemd/system/nomad-jobs-setup.service
+    [Unit]
+    Description=Setup Nomad Jobs
+    After=nomad-dev.service vault-dev.service
+    Wants=nomad-dev.service vault-dev.service
+
+    [Service]
+    Type=oneshot
+    ExecStart=/opt/setup-nomad-jobs.sh
+    RemainAfterExit=yes
+    StandardOutput=journal
+    StandardError=journal
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    
+    systemctl enable nomad-jobs-setup
+    systemctl start nomad-jobs-setup
+

@@ -34,28 +34,17 @@ job "clients-backend" {
     task "clients" {
       driver = "docker"
 
-      vault {
-        policies = ["nomad-cluster"]
-      }
-
-      template {
-        data = <<EOH
-QUARKUS_DATASOURCE_USERNAME="{{ with secret "kv/data/mysql" }}{{ .Data.data.user }}{{ end }}"
-QUARKUS_DATASOURCE_PASSWORD="{{ with secret "kv/data/mysql" }}{{ .Data.data.password }}{{ end }}"
-QUARKUS_DATASOURCE_JDBC_URL="{{ with secret "kv/data/mysql" }}{{ .Data.data.url }}{{ end }}"
-EOH
-        destination = "local/secrets.env"
-        env         = true
-      }
-
       config {
-        image = var.registry != "" ? "${var.registry}/clients-hc-example-jvm:0.0.1" : "quarkus/clients-hc-example-jvm:0.0.1"
+        image = var.registry != "" ? "${var.registry}/clients-hc-example-jvm:latest" : "apuntesdejava/clients-hc-example-jvm:latest"
         ports = ["http"]
       }
 
       env {
         QUARKUS_HTTP_PORT           = "${NOMAD_PORT_http}"
         QUARKUS_DATASOURCE_DB_KIND  = "mysql"
+        QUARKUS_DATASOURCE_USERNAME = "appuser"
+        QUARKUS_DATASOURCE_PASSWORD = "apppass123!"
+        QUARKUS_DATASOURCE_JDBC_URL = "jdbc:mysql://127.0.0.1:3306/appdb"
         JAVA_OPTS_APPEND            = "-Dquarkus.http.host=0.0.0.0"
       }
 

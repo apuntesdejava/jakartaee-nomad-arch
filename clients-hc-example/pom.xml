@@ -15,7 +15,6 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.32.2</quarkus.platform.version>
         <skipITs>true</skipITs>
     </properties>
 
@@ -147,11 +146,18 @@
                                     <goal>build</goal>
                                 </goals>
                             </execution>
+                            <execution>
+                                <id>docker-push</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>push</goal>
+                                </goals>
+                            </execution>
                         </executions>
                         <configuration>
                             <images>
                                 <image>
-                                    <name>quarkus/clients-hc-example-jvm:0.0.1</name>
+                                    <name>${docker.registry}/clients-hc-example-jvm:${project.version}</name>
                                     <build>
                                         <dockerFile>${project.basedir}/src/main/docker/Dockerfile.jvm</dockerFile>
                                         <contextDir>${project.basedir}</contextDir>
