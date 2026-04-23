@@ -49,7 +49,7 @@ EOH
       }
 
       config {
-        image = var.registry != "" ? "${var.registry}/clients-hc-example-jvm:0.0.1" : "quarkus/clients-hc-example-jvm:0.0.1"
+        image = var.registry != "" ? "${var.registry}/clients-hc-example-jvm:0.0.1" : "apuntesdejava/clients-hc-example-jvm:0.0.1"
         ports = ["http"]
       }
 

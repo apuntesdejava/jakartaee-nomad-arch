@@ -63,7 +63,7 @@ EOH
       }
 
       config {
-        image = var.registry != "" ? "${var.registry}/sales-hc-example:0.0.1" : "payara/sales-hc-example:0.0.1"
+        image = var.registry != "" ? "${var.registry}/sales-hc-example:0.0.1" : "apuntesdejava/sales-hc-example:0.0.1"
         ports = ["http"]
         args  = [
           "--postbootcommandfile", "/local/post-boot.txt",
