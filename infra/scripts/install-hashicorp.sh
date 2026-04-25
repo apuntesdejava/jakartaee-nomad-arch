@@ -2,9 +2,12 @@
 set -e
 
 # ── Versiones a instalar ─────────────────────────────────────
-CONSUL_VERSION="1.22.6"
+CONSUL_VERSION="1.22.7"
+#NOMAD_VERSION="2.0.0"
 NOMAD_VERSION="1.11.3"
-VAULT_VERSION="1.21.4"   # opcional, para cuando uses secrets
+#VAULT_VERSION="1.21.4"   # opcional, para cuando uses secrets
+VAULT_VERSION="2.0.0"   # opcional, para cuando uses secrets
+TERRAFORM_VERSION="1.14.9"
 
 ARCH="linux_amd64"
 INSTALL_DIR="/usr/local/bin"
@@ -64,6 +67,7 @@ install_hc_tool() {
 install_hc_tool "consul" "$CONSUL_VERSION"
 install_hc_tool "nomad"  "$NOMAD_VERSION"
 install_hc_tool "vault"  "$VAULT_VERSION"
+install_hc_tool "terraform"  "$TERRAFORM_VERSION"
 
 # ── CNI plugins (requerido por Nomad para el service mesh) ───
 CNI_VERSION="v1.6.2"

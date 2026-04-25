@@ -1,0 +1,75 @@
+#cloud-config
+package_update: true
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - docker.io
+  - unzip
+  - mysql-client
+
+runcmd:
+  # 1. Instalar HashiCorp Stack
+  - curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  - echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(ls_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+  - apt-get update && apt-get install -y nomad consul vault
+
+  # 2. Configurar Docker y compatibilidad con host.docker.internal
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ${admin_username}
+  - echo "127.0.0.1 host.docker.internal" >> /etc/hosts
+
+  # 3. Levantar servicios básicos
+  - |
+    PRIVATE_IP=$(hostname -I | awk '{print $1}')
+    
+    # Consul
+    consul agent -dev -client=0.0.0.0 -bind=$PRIVATE_IP -advertise=$PRIVATE_IP > /var/log/consul.log 2>&1 &
+    
+    # Vault
+    vault server -dev -dev-root-token-id="root" -dev-listen-address="0.0.0.0:8200" > /var/log/vault.log 2>&1 &
+    
+    # Nomad (Configurado para hablar con Vault)
+    cat <<EOF > /etc/nomad.d/vault.hcl
+    vault {
+      enabled = true
+      address = "http://127.0.0.1:8200"
+      token   = "root"
+    }
+    EOF
+    nomad agent -dev -config=/etc/nomad.d/vault.hcl -bind=0.0.0.0 -network-interface=eth0 > /var/log/nomad.log 2>&1 &
+
+  # 4. Configurar Vault (Lógica de setup-vault.sh)
+  - |
+    export VAULT_ADDR='http://127.0.0.1:8200'
+    export VAULT_TOKEN='root'
+    sleep 10 # Esperar a que Vault arranque
+    
+    vault secrets enable -path=kv kv-v2 || true
+    vault kv put kv/mysql user="appuser" password="apppass" url="jdbc:mysql://host.docker.internal:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true"
+    
+    vault auth enable jwt || true
+    vault write auth/jwt/config jwks_url="http://localhost:4646/.well-known/jwks.json" jwt_supported_algs="RS256" default_role="nomad-cluster"
+    
+    vault write auth/jwt/role/nomad-cluster - <<EOF
+    {
+      "role_type": "jwt",
+      "bound_audiences": ["vault.io"],
+      "user_claim": "nomad_job_id",
+      "token_policies": ["nomad-cluster"],
+      "token_type": "service",
+      "bound_claims": { "nomad_namespace": "default" }
+    }
+    EOF
+    
+    vault policy write nomad-cluster - <<EOF
+    path "kv/data/mysql" { capabilities = ["read"] }
+    path "auth/token/renew-self" { capabilities = ["update"] }
+    path "auth/token/lookup-self" { capabilities = ["read"] }
+    EOF
+
+  # 5. Levantar MySQL en Docker
+  - docker run -d --name mysql-dev -p 3306:3306 -e MYSQL_ROOT_PASSWORD=rootpass -e MYSQL_DATABASE=appdb -e MYSQL_USER=appuser -e MYSQL_PASSWORD=apppass mysql:9.6.0
