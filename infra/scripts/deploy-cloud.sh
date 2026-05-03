@@ -41,15 +41,18 @@ if ! consul kv put -http-addr="$CONSUL_HTTP_ADDR" configs/payara-resources "@$PR
 fi
 
 echo "── 3. Desplegando Jobs en Nomad Cloud..."
+nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/api-gateway.nomad"
 nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/clients.nomad"
 nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/products.nomad"
 nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/sales.nomad"
 
 echo ""
 echo "✓ ¡Despliegue completado con éxito!"
-echo "  Nomad UI:   http://$CLOUD_IP:4646"
-echo "  Consul UI:  http://$CLOUD_IP:8500"
-echo "  Clients:    http://$CLOUD_IP:8081/clients/api"
-echo "  Products:   http://$CLOUD_IP:8082/products/api"
-echo "  Sales:      http://$CLOUD_IP:8083/sales"
+echo "  Nomad UI:    http://$CLOUD_IP:4646"
+echo "  Consul UI:   http://$CLOUD_IP:8500"
+echo "  Fabio UI:    http://$CLOUD_IP:9998"
+echo "  Gateway API: http://$CLOUD_IP:8000"
+echo "  Clients:     http://$CLOUD_IP:8000/clients/api"
+echo "  Products:    http://$CLOUD_IP:8000/products/api"
+echo "  Sales:       http://$CLOUD_IP:8000/sales"
 echo ""

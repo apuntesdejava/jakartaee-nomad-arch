@@ -9,8 +9,6 @@ terraform {
 
 provider "azurerm" {
   features {}
-  # En v4, podrías necesitar especificar subscription_id si tienes varias,
-  # pero si 'az login' es único, lo tomará automáticamente.
 }
 
 # 1. Resource Group
@@ -34,7 +32,7 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# 3. Public IP (Actualizado para v4: Standard/Static es el nuevo estándar)
+# 3. Public IP
 resource "azurerm_public_ip" "pip" {
   name                = "nomad-ip"
   location            = azurerm_resource_group.rg.location
@@ -43,7 +41,7 @@ resource "azurerm_public_ip" "pip" {
   sku                 = "Standard"
 }
 
-# 4. Network Security Group (Firewall)
+# 4. Network Security Group
 resource "azurerm_network_security_group" "nsg" {
   name                = "nomad-nsg"
   location            = azurerm_resource_group.rg.location
@@ -96,6 +94,42 @@ resource "azurerm_network_security_group" "nsg" {
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
+
+  security_rule {
+    name                       = "FabioUI"
+    priority                   = 1005
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "9998"
+    source_address_prefix      = var.my_ip
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "VaultUI"
+    priority                   = 1006
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8200"
+    source_address_prefix      = var.my_ip
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Backends"
+    priority                   = 1007
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8081-8083"
+    source_address_prefix      = var.my_ip
+    destination_address_prefix = "*"
+  }
 }
 
 # 5. Network Interface
@@ -130,7 +164,7 @@ resource "azurerm_linux_virtual_machine" "vm" {
 
   admin_ssh_key {
     username   = var.admin_username
-    public_key = file("~/.ssh/id_rsa.pub")
+    public_key = var.admin_ssh_public_key
   }
 
   os_disk {
@@ -145,8 +179,11 @@ resource "azurerm_linux_virtual_machine" "vm" {
     version   = "latest"
   }
 
-  user_data = base64encode(templatefile("${path.module}/cloud-init.yaml", {
-    admin_username = var.admin_username
+  custom_data = base64encode(templatefile("${path.module}/cloud-init.yaml", {
+    admin_username      = var.admin_username
+    mysql_root_password = var.mysql_root_password
+    mysql_user          = var.mysql_user
+    mysql_password      = var.mysql_password
   }))
 }
 
