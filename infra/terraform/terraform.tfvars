@@ -3,7 +3,7 @@
 # ============================================================================
 
 resource_group_name = "jakartaee-nomad-demo-rg"
-location            = "eastus"
+location            = "westeurope"
 
 # ============================================================================
 # Virtual Machine Configuration
@@ -24,6 +24,7 @@ my_ip = "0.0.0.0/0"  # Permite acceso desde cualquier lugar (dev)
 # Database Configuration
 # ============================================================================
 
-mysql_root_password = "rootpass"
+mysql_server_name   = "jakartaee-nomad-mysql-v2" # Nuevo nombre para evitar conflictos con el estado fallido
+mysql_root_password = "RootPassword123!"
 mysql_user          = "appuser"
-mysql_password      = "apppass"
+mysql_password      = "AppPassword123!"

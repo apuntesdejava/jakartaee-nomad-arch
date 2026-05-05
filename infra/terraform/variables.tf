@@ -7,7 +7,7 @@ variable "resource_group_name" {
 variable "location" {
   description = "Azure region"
   type        = string
-  default     = "eastus"
+  default     = "westeurope"
 }
 
 variable "vm_size" {
@@ -28,10 +28,15 @@ variable "my_ip" {
   default     = "0.0.0.0/0"
 }
 
+variable "mysql_server_name" {
+  description = "Globally unique name for the Azure Database for MySQL"
+  type        = string
+}
+
 variable "mysql_root_password" {
   description = "MySQL root password"
   type        = string
-  default     = "rootpass"
+  default     = "RootPassword123!"
 }
 
 variable "mysql_user" {
@@ -43,7 +48,13 @@ variable "mysql_user" {
 variable "mysql_password" {
   description = "MySQL application password"
   type        = string
-  default     = "apppass"
+  default     = "AppPassword123!"
+}
+
+variable "mysql_sku" {
+  description = "SKU for MySQL Flexible Server"
+  type        = string
+  default     = "B_Standard_B2s"
 }
 
 variable "admin_ssh_public_key" {

@@ -151,7 +151,35 @@ resource "azurerm_network_interface_security_group_association" "nsg_assoc" {
   network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
-# 6. Virtual Machine
+# 6. Azure Database for MySQL Flexible Server
+resource "azurerm_mysql_flexible_server" "mysql" {
+  name                   = var.mysql_server_name
+  resource_group_name    = azurerm_resource_group.rg.name
+  location               = azurerm_resource_group.rg.location
+  administrator_login    = var.mysql_user
+  administrator_password = var.mysql_password
+  sku_name               = var.mysql_sku
+  version                = "8.0.21"
+}
+
+resource "azurerm_mysql_flexible_database" "db" {
+  name                = "appdb"
+  resource_group_name = azurerm_resource_group.rg.name
+  server_name         = azurerm_mysql_flexible_server.mysql.name
+  charset             = "utf8"
+  collation           = "utf8_general_ci"
+}
+
+# Allow all Azure services to connect (simplest for demo)
+resource "azurerm_mysql_flexible_server_firewall_rule" "allow_azure" {
+  name                = "allow-azure-services"
+  resource_group_name = azurerm_resource_group.rg.name
+  server_name         = azurerm_mysql_flexible_server.mysql.name
+  start_ip_address    = "0.0.0.0"
+  end_ip_address      = "0.0.0.0"
+}
+
+# 7. Virtual Machine
 resource "azurerm_linux_virtual_machine" "vm" {
   name                = "nomad-demo-node"
   resource_group_name = azurerm_resource_group.rg.name
@@ -180,13 +208,17 @@ resource "azurerm_linux_virtual_machine" "vm" {
   }
 
   custom_data = base64encode(templatefile("${path.module}/cloud-init.yaml", {
-    admin_username      = var.admin_username
-    mysql_root_password = var.mysql_root_password
-    mysql_user          = var.mysql_user
-    mysql_password      = var.mysql_password
+    admin_username = var.admin_username
+    mysql_user     = var.mysql_user
+    mysql_password = var.mysql_password
+    mysql_host     = azurerm_mysql_flexible_server.mysql.fqdn
   }))
 }
 
 output "public_ip" {
   value = azurerm_linux_virtual_machine.vm.public_ip_address
+}
+
+output "mysql_host" {
+  value = azurerm_mysql_flexible_server.mysql.fqdn
 }
