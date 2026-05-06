@@ -90,6 +90,12 @@ runcmd:
       enabled = true
       address = "http://127.0.0.1:8200"
       token   = "root"
+      jwt_auth_backend_path = "jwt-nomad"
+
+      default_identity {
+        aud = ["vault.io"]
+        ttl = "1h"
+      }
     }
     EOF
 
@@ -124,25 +130,26 @@ runcmd:
     vault kv put kv/mysql \
       user="${mysql_user}" \
       password="${mysql_password}" \
-      url="jdbc:mysql://${mysql_host}:3306/appdb?useSSL=true&trustServerCertificate=true&allowPublicKeyRetrieval=true"
+      url="jdbc:mysql://${mysql_host}:3306/appdb?sslMode=DISABLED&allowPublicKeyRetrieval=true"
 
-    vault auth enable jwt || true
+    vault auth enable -path=jwt-nomad jwt || true
 
     for i in {1..60}; do
       curl -fsS "http://$${PRIVATE_IP}:4646/.well-known/jwks.json" >/dev/null && break
       sleep 5
     done
 
-    vault write auth/jwt/config \
+    vault write auth/jwt-nomad/config \
       jwks_url="http://$${PRIVATE_IP}:4646/.well-known/jwks.json" \
       jwt_supported_algs="RS256" \
       default_role="nomad-cluster"
 
-    vault write auth/jwt/role/nomad-cluster - <<EOF
+    vault write auth/jwt-nomad/role/nomad-cluster - <<EOF
     {
       "role_type": "jwt",
       "bound_audiences": ["vault.io"],
-      "user_claim": "nomad_job_id",
+      "user_claim": "/nomad_job_id",
+      "user_claim_json_pointer": true,
       "token_policies": ["nomad-cluster"],
       "token_type": "service",
       "bound_claims": {

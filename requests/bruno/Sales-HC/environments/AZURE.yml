@@ -1,0 +1,10 @@
+name: AZURE
+variables:
+  - name: productBaseUrl
+    value: http://52.157.80.45:8000/products/api
+  - name: clientBaseUrl
+    value: http://52.157.80.45:8000/clients/api
+  - name: SALES_HOST
+    value: http://52.157.80.45:8000/
+  - name: saleBaseUrl
+    value: http://52.157.80.45:8000/sales/resources

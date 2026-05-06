@@ -1,0 +1,10 @@
+name: LOCAL_HC
+variables:
+  - name: productBaseUrl
+    value: http://8.8.8.8:8000/products/api
+  - name: clientBaseUrl
+    value: http://8.8.8.8:8000/clients/api
+  - name: SALES_HOST
+    value: http://8.8.8.8:8000/
+  - name: saleBaseUrl
+    value: http://8.8.8.8:8000/sales/resources

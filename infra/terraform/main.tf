@@ -13,6 +13,31 @@ provider "azurerm" {
 
 locals {
   name_prefix = "jakartaee-nomad"
+  mysql_fqdn = var.manage_mysql ? (
+    azurerm_mysql_flexible_server.mysql[0].fqdn
+    ) : (
+    data.azurerm_mysql_flexible_server.mysql[0].fqdn
+  )
+}
+
+moved {
+  from = azurerm_mysql_flexible_server.mysql
+  to   = azurerm_mysql_flexible_server.mysql[0]
+}
+
+moved {
+  from = azurerm_mysql_flexible_database.db
+  to   = azurerm_mysql_flexible_database.db[0]
+}
+
+moved {
+  from = azurerm_mysql_flexible_server_firewall_rule.allow_control
+  to   = azurerm_mysql_flexible_server_firewall_rule.allow_control[0]
+}
+
+moved {
+  from = azurerm_mysql_flexible_server_firewall_rule.allow_nat
+  to   = azurerm_mysql_flexible_server_firewall_rule.allow_nat[0]
 }
 
 resource "azurerm_resource_group" "rg" {
@@ -219,36 +244,63 @@ resource "azurerm_network_interface" "control" {
   }
 }
 
+data "azurerm_mysql_flexible_server" "mysql" {
+  count               = var.manage_mysql ? 0 : 1
+  name                = var.mysql_server_name
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
 resource "azurerm_mysql_flexible_server" "mysql" {
+  count                  = var.manage_mysql ? 1 : 0
   name                   = var.mysql_server_name
   resource_group_name    = azurerm_resource_group.rg.name
   location               = azurerm_resource_group.rg.location
   administrator_login    = var.mysql_user
   administrator_password = var.mysql_password
   sku_name               = var.mysql_sku
-  version                = "8.0.21"
+  version                = "8.4"
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [version]
+  }
 }
 
 resource "azurerm_mysql_flexible_database" "db" {
+  count               = var.manage_mysql ? 1 : 0
   name                = "appdb"
   resource_group_name = azurerm_resource_group.rg.name
-  server_name         = azurerm_mysql_flexible_server.mysql.name
+  server_name         = azurerm_mysql_flexible_server.mysql[0].name
   charset             = "utf8"
   collation           = "utf8_general_ci"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "azurerm_mysql_flexible_server_configuration" "require_secure_transport" {
+  count               = var.manage_mysql ? 1 : 0
+  name                = "require_secure_transport"
+  resource_group_name = azurerm_resource_group.rg.name
+  server_name         = azurerm_mysql_flexible_server.mysql[0].name
+  value               = "OFF"
 }
 
 resource "azurerm_mysql_flexible_server_firewall_rule" "allow_control" {
+  count               = var.manage_mysql ? 1 : 0
   name                = "allow-control-plane"
   resource_group_name = azurerm_resource_group.rg.name
-  server_name         = azurerm_mysql_flexible_server.mysql.name
+  server_name         = azurerm_mysql_flexible_server.mysql[0].name
   start_ip_address    = azurerm_public_ip.control_pip.ip_address
   end_ip_address      = azurerm_public_ip.control_pip.ip_address
 }
 
 resource "azurerm_mysql_flexible_server_firewall_rule" "allow_nat" {
+  count               = var.manage_mysql ? 1 : 0
   name                = "allow-nomad-workers"
   resource_group_name = azurerm_resource_group.rg.name
-  server_name         = azurerm_mysql_flexible_server.mysql.name
+  server_name         = azurerm_mysql_flexible_server.mysql[0].name
   start_ip_address    = azurerm_public_ip.nat_pip.ip_address
   end_ip_address      = azurerm_public_ip.nat_pip.ip_address
 }
@@ -285,7 +337,7 @@ resource "azurerm_linux_virtual_machine" "control" {
     vault_version     = var.vault_version
     mysql_user        = var.mysql_user
     mysql_password    = var.mysql_password
-    mysql_host        = azurerm_mysql_flexible_server.mysql.fqdn
+    mysql_host        = local.mysql_fqdn
     api_gateway_nomad = base64encode(file("${path.module}/../nomad/api-gateway.nomad"))
     clients_nomad     = base64encode(file("${path.module}/../nomad/clients.nomad"))
     products_nomad    = base64encode(file("${path.module}/../nomad/products.nomad"))
@@ -294,8 +346,10 @@ resource "azurerm_linux_virtual_machine" "control" {
 
   depends_on = [
     azurerm_mysql_flexible_database.db,
+    azurerm_mysql_flexible_server_configuration.require_secure_transport,
     azurerm_mysql_flexible_server_firewall_rule.allow_control,
-    azurerm_mysql_flexible_server_firewall_rule.allow_nat
+    azurerm_mysql_flexible_server_firewall_rule.allow_nat,
+    data.azurerm_mysql_flexible_server.mysql
   ]
 }
 
@@ -358,7 +412,7 @@ output "gateway_public_ip" {
 }
 
 output "mysql_host" {
-  value = azurerm_mysql_flexible_server.mysql.fqdn
+  value = local.mysql_fqdn
 }
 
 output "ssh_control" {

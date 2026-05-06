@@ -45,6 +45,12 @@ variable "mysql_server_name" {
   type        = string
 }
 
+variable "manage_mysql" {
+  description = "Whether this Terraform stack should create and manage Azure Database for MySQL. Set to false to reuse an existing server."
+  type        = bool
+  default     = true
+}
+
 variable "mysql_root_password" {
   description = "MySQL root password"
   type        = string

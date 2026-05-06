@@ -73,6 +73,7 @@ runcmd:
     vault {
       enabled = true
       address = "http://${control_private_ip}:8200"
+      jwt_auth_backend_path = "jwt-nomad"
     }
     EOF
 
