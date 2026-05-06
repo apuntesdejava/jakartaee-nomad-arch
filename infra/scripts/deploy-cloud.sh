@@ -41,10 +41,10 @@ if ! consul kv put -http-addr="$CONSUL_HTTP_ADDR" configs/payara-resources "@$PR
 fi
 
 echo "── 3. Desplegando Jobs en Nomad Cloud..."
-nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/api-gateway.nomad"
-nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/clients.nomad"
-nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/products.nomad"
-nomad job run -var "network_mode=host" "$INFRA_DIR/nomad/sales.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/api-gateway.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/clients.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/products.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/sales.nomad"
 
 echo ""
 echo "✓ ¡Despliegue completado con éxito!"

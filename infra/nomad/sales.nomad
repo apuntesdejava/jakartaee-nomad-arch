@@ -35,7 +35,7 @@ job "sales-backend" {
 
       template {
         data = <<EOF
-{{ with secret "kv/data/mysql" }}
+{{- with secret "kv/data/mysql" -}}
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE resources PUBLIC
         "-//GlassFish.org//DTD GlassFish Application Server 3.1 Resource Definitions//EN"
@@ -45,7 +45,7 @@ job "sales-backend" {
             name="sales-pool"
             datasource-classname="com.mysql.cj.jdbc.MysqlDataSource"
             res-type="javax.sql.DataSource">
-        <property name="url"      value="{{ .Data.data.url }}"/>
+        <property name="url"      value="{{ .Data.data.url | replaceAll "&" "&amp;" }}"/>
         <property name="user"     value="{{ .Data.data.user }}"/>
         <property name="password" value="{{ .Data.data.password }}"/>
     </jdbc-connection-pool>
@@ -54,7 +54,7 @@ job "sales-backend" {
             jndi-name="jdbc/sales"
             pool-name="sales-pool"/>
 </resources>
-{{ end }}
+{{- end -}}
 EOF
         destination = "local/payara-resources.xml"
       }

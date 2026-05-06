@@ -148,7 +148,7 @@
                         <configuration>
                             <images>
                                 <image>
-                                    <name>${docker.registry}/products-hc-example-jvm:0.0.1</name>
+                                    <name>${docker.registry}/products-hc-example-jvm:${project.version}</name>
                                     <build>
                                         <dockerFile>${project.basedir}/src/main/docker/Dockerfile.jvm</dockerFile>
                                         <contextDir>${project.basedir}</contextDir>

@@ -100,10 +100,10 @@ echo "── 5. Configurando Consul..."
 
 # ── 6. Jobs Nomad ────────────────────────────────────────────
 echo "── 6. Desplegando jobs..."
-nomad job run -var "project_root=$PROJECT_ROOT" "$INFRA_DIR/nomad/clients.nomad"
-nomad job run -var "project_root=$PROJECT_ROOT" "$INFRA_DIR/nomad/products.nomad"
-nomad job run -var "project_root=$PROJECT_ROOT" "$INFRA_DIR/nomad/sales.nomad"
-nomad job run "$INFRA_DIR/nomad/api-gateway.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/clients.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/products.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/sales.nomad"
+nomad job run -detach "$INFRA_DIR/nomad/api-gateway.nomad"
 
 # ── Listo ────────────────────────────────────────────────────
 echo ""

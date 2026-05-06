@@ -110,7 +110,7 @@
                     </configuration>
                 </plugin>
 
-                <!-- Docker plugin (fabric8): versión y ejecución en deploy centralizadas -->
+                <!-- Docker plugin (fabric8): versión y ejecución en install centralizadas -->
                 <plugin>
                     <groupId>io.fabric8</groupId>
                     <artifactId>docker-maven-plugin</artifactId>
@@ -118,7 +118,7 @@
                     <executions>
                         <execution>
                             <id>docker-deploy</id>
-                            <phase>deploy</phase>
+                            <phase>install</phase>
                             <goals>
                                 <goal>build</goal>
                                 <goal>push</goal>

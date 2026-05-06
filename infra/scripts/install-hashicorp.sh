@@ -2,10 +2,8 @@
 set -e
 
 # ── Versiones a instalar ─────────────────────────────────────
-CONSUL_VERSION="1.22.7"
-#NOMAD_VERSION="2.0.0"
-NOMAD_VERSION="1.11.3"
-#VAULT_VERSION="1.21.4"   # opcional, para cuando uses secrets
+CONSUL_VERSION="1.22.7" 
+NOMAD_VERSION="2.0.0" 
 VAULT_VERSION="2.0.0"   # opcional, para cuando uses secrets
 TERRAFORM_VERSION="1.14.9"
 
@@ -56,8 +54,8 @@ install_hc_tool() {
   fi
 
   local url="https://releases.hashicorp.com/${name}/${version}/${name}_${version}_${ARCH}.zip"
-  echo "── Descargando $name $version..."
-  curl -fsSL "$url" -o "$TMP_DIR/${name}.zip"
+  echo "── Descargando $name $version... $url"
+  curl -fsSLk "$url" -o "$TMP_DIR/${name}.zip"
   unzip -q "$TMP_DIR/${name}.zip" -d "$TMP_DIR"
   sudo install -m 755 "$TMP_DIR/$name" "$INSTALL_DIR/$name"
   info "$name $version instalado en $INSTALL_DIR/$name"
