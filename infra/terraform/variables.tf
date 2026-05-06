@@ -11,9 +11,21 @@ variable "location" {
 }
 
 variable "vm_size" {
-  description = "Size of the Virtual Machine"
+  description = "Size of the control-plane virtual machine"
   type        = string
   default     = "Standard_B2s"
+}
+
+variable "worker_vm_size" {
+  description = "Size of each Nomad worker virtual machine"
+  type        = string
+  default     = "Standard_B2s"
+}
+
+variable "worker_count" {
+  description = "Number of Nomad worker nodes in the VM Scale Set"
+  type        = number
+  default     = 3
 }
 
 variable "admin_username" {
@@ -55,6 +67,24 @@ variable "mysql_sku" {
   description = "SKU for MySQL Flexible Server"
   type        = string
   default     = "B_Standard_B2s"
+}
+
+variable "nomad_version" {
+  description = "Nomad version to install on Azure nodes"
+  type        = string
+  default     = "2.0.0"
+}
+
+variable "consul_version" {
+  description = "Consul version to install on Azure nodes"
+  type        = string
+  default     = "1.22.7"
+}
+
+variable "vault_version" {
+  description = "Vault version to install on the control-plane node"
+  type        = string
+  default     = "2.0.0"
 }
 
 variable "admin_ssh_public_key" {

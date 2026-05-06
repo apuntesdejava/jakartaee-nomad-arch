@@ -1,0 +1,198 @@
+#cloud-config
+package_update: true
+
+runcmd:
+  - |
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip jq docker.io
+
+    systemctl enable docker
+    systemctl start docker
+    usermod -aG docker ${admin_username}
+
+    install_hashicorp() {
+      local name="$1"
+      local version="$2"
+      local zip="/tmp/$${name}.zip"
+
+      curl -fsSL "https://releases.hashicorp.com/$${name}/$${version}/$${name}_$${version}_linux_amd64.zip" -o "$${zip}"
+      unzip -o "$${zip}" -d /tmp
+      install -m 755 "/tmp/$${name}" "/usr/local/bin/$${name}"
+      rm -f "$${zip}" "/tmp/$${name}"
+    }
+
+    install_hashicorp consul "${consul_version}"
+    install_hashicorp nomad "${nomad_version}"
+    install_hashicorp vault "${vault_version}"
+
+    PRIVATE_IP="$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)"
+
+    mkdir -p /opt/consul /opt/nomad /etc/nomad.d /opt/nomad-jobs
+
+    cat > /etc/systemd/system/consul.service <<EOF
+    [Unit]
+    Description=Consul Server
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    ExecStart=/usr/local/bin/consul agent -server -bootstrap-expect=1 -ui -datacenter=dc1 -node=control -data-dir=/opt/consul -client=0.0.0.0 -bind=$${PRIVATE_IP} -advertise=$${PRIVATE_IP}
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+    cat > /etc/systemd/system/vault.service <<EOF
+    [Unit]
+    Description=Vault Server
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    ExecStart=/usr/local/bin/vault server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+    cat > /etc/nomad.d/nomad.hcl <<EOF
+    datacenter = "dc1"
+    data_dir   = "/opt/nomad"
+    bind_addr  = "0.0.0.0"
+
+    advertise {
+      http = "$${PRIVATE_IP}"
+      rpc  = "$${PRIVATE_IP}"
+      serf = "$${PRIVATE_IP}"
+    }
+
+    server {
+      enabled          = true
+      bootstrap_expect = 1
+    }
+
+    client {
+      enabled = false
+    }
+
+    consul {
+      address = "127.0.0.1:8500"
+    }
+
+    vault {
+      enabled = true
+      address = "http://127.0.0.1:8200"
+      token   = "root"
+    }
+    EOF
+
+    cat > /etc/systemd/system/nomad.service <<EOF
+    [Unit]
+    Description=Nomad Server
+    After=network-online.target consul.service vault.service
+    Wants=network-online.target
+
+    [Service]
+    ExecStart=/usr/local/bin/nomad agent -config=/etc/nomad.d
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+    systemctl daemon-reload
+    systemctl enable consul vault nomad
+    systemctl start consul vault nomad
+
+    export VAULT_ADDR="http://127.0.0.1:8200"
+    export VAULT_TOKEN="root"
+
+    for i in {1..60}; do
+      curl -fsS "$${VAULT_ADDR}/v1/sys/health" >/dev/null && break
+      sleep 2
+    done
+
+    vault secrets enable -path=kv kv-v2 || true
+    vault kv put kv/mysql \
+      user="${mysql_user}" \
+      password="${mysql_password}" \
+      url="jdbc:mysql://${mysql_host}:3306/appdb?useSSL=true&trustServerCertificate=true&allowPublicKeyRetrieval=true"
+
+    vault auth enable jwt || true
+
+    for i in {1..60}; do
+      curl -fsS "http://$${PRIVATE_IP}:4646/.well-known/jwks.json" >/dev/null && break
+      sleep 5
+    done
+
+    vault write auth/jwt/config \
+      jwks_url="http://$${PRIVATE_IP}:4646/.well-known/jwks.json" \
+      jwt_supported_algs="RS256" \
+      default_role="nomad-cluster"
+
+    vault write auth/jwt/role/nomad-cluster - <<EOF
+    {
+      "role_type": "jwt",
+      "bound_audiences": ["vault.io"],
+      "user_claim": "nomad_job_id",
+      "token_policies": ["nomad-cluster"],
+      "token_type": "service",
+      "bound_claims": {
+        "nomad_namespace": "default"
+      }
+    }
+    EOF
+
+    vault policy write nomad-cluster - <<EOF
+    path "kv/data/mysql" {
+      capabilities = ["read"]
+    }
+    path "auth/token/renew-self" {
+      capabilities = ["update"]
+    }
+    path "auth/token/lookup-self" {
+      capabilities = ["read"]
+    }
+    EOF
+
+    cat <<'EOF' | base64 -d > /opt/nomad-jobs/api-gateway.nomad
+    ${api_gateway_nomad}
+    EOF
+
+    cat <<'EOF' | base64 -d > /opt/nomad-jobs/clients.nomad
+    ${clients_nomad}
+    EOF
+
+    cat <<'EOF' | base64 -d > /opt/nomad-jobs/products.nomad
+    ${products_nomad}
+    EOF
+
+    cat <<'EOF' | base64 -d > /opt/nomad-jobs/sales.nomad
+    ${sales_nomad}
+    EOF
+
+    cat > /opt/setup-nomad-jobs.sh <<'EOF'
+    #!/bin/bash
+    set -euo pipefail
+
+    for i in {1..60}; do
+      /usr/local/bin/nomad status >/dev/null 2>&1 && break
+      sleep 5
+    done
+
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/api-gateway.nomad
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/clients.nomad
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/products.nomad
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/sales.nomad
+    EOF
+
+    chmod +x /opt/setup-nomad-jobs.sh
+    /opt/setup-nomad-jobs.sh

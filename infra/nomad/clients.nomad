@@ -6,7 +6,7 @@ job "clients-backend" {
     network {
       mode = "host"
       port "http" {
-        static = 8081
+#        static = 8081
         to     = 8080
       }
     }

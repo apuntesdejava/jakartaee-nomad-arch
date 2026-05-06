@@ -8,7 +8,7 @@ job "sales-backend" {
     network {
       mode = "host"
       port "http" {
-        static = 8083
+#        static = 8083
         to     = 8080
       }
     }
@@ -85,8 +85,8 @@ EOH
       }
 
       env {
-        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = "http://${attr.unique.network.ip-address}:8082/products/api"
-        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = "http://${attr.unique.network.ip-address}:8081/clients/api"
+        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = "http://${attr.unique.network.ip-address}:8000/products/api"
+        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = "http://${attr.unique.network.ip-address}:8000/clients/api"
         PAYARA_ARGS = "--port ${NOMAD_PORT_http} --nocluster"
       }
 

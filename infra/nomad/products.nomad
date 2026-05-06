@@ -6,7 +6,7 @@ job "products-backend" {
     network {
       mode = "host"
       port "http" {
-        static = 8082
+#        static = 8082
         to     = 8080
       }
     }

@@ -11,15 +11,17 @@ provider "azurerm" {
   features {}
 }
 
-# 1. Resource Group
+locals {
+  name_prefix = "jakartaee-nomad"
+}
+
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
 
-# 2. Networking
 resource "azurerm_virtual_network" "vnet" {
-  name                = "nomad-vnet"
+  name                = "${local.name_prefix}-vnet"
   address_space       = ["10.0.0.0/16"]
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
@@ -32,20 +34,63 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# 3. Public IP
-resource "azurerm_public_ip" "pip" {
-  name                = "nomad-ip"
+resource "azurerm_public_ip" "control_pip" {
+  name                = "${local.name_prefix}-control-ip"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
 }
 
-# 4. Network Security Group
-resource "azurerm_network_security_group" "nsg" {
-  name                = "nomad-nsg"
+resource "azurerm_public_ip" "gateway_pip" {
+  name                = "${local.name_prefix}-gateway-ip"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+resource "azurerm_public_ip" "nat_pip" {
+  name                = "${local.name_prefix}-nat-ip"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+resource "azurerm_nat_gateway" "nat" {
+  name                = "${local.name_prefix}-nat"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku_name            = "Standard"
+}
+
+resource "azurerm_nat_gateway_public_ip_association" "nat" {
+  nat_gateway_id       = azurerm_nat_gateway.nat.id
+  public_ip_address_id = azurerm_public_ip.nat_pip.id
+}
+
+resource "azurerm_subnet_nat_gateway_association" "subnet" {
+  subnet_id      = azurerm_subnet.subnet.id
+  nat_gateway_id = azurerm_nat_gateway.nat.id
+}
+
+resource "azurerm_network_security_group" "nsg" {
+  name                = "${local.name_prefix}-nsg"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  security_rule {
+    name                       = "AllowVnetInternal"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
 
   security_rule {
     name                       = "SSH"
@@ -118,40 +163,62 @@ resource "azurerm_network_security_group" "nsg" {
     source_address_prefix      = var.my_ip
     destination_address_prefix = "*"
   }
+}
 
-  security_rule {
-    name                       = "Backends"
-    priority                   = 1007
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "8081-8083"
-    source_address_prefix      = var.my_ip
-    destination_address_prefix = "*"
+resource "azurerm_subnet_network_security_group_association" "subnet" {
+  subnet_id                 = azurerm_subnet.subnet.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_lb" "gateway" {
+  name                = "${local.name_prefix}-gateway-lb"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku                 = "Standard"
+
+  frontend_ip_configuration {
+    name                 = "gateway-public"
+    public_ip_address_id = azurerm_public_ip.gateway_pip.id
   }
 }
 
-# 5. Network Interface
-resource "azurerm_network_interface" "nic" {
-  name                = "nomad-nic"
+resource "azurerm_lb_backend_address_pool" "gateway" {
+  name            = "nomad-workers"
+  loadbalancer_id = azurerm_lb.gateway.id
+}
+
+resource "azurerm_lb_probe" "gateway" {
+  name            = "fabio-http"
+  loadbalancer_id = azurerm_lb.gateway.id
+  protocol        = "Tcp"
+  port            = 8000
+}
+
+resource "azurerm_lb_rule" "gateway" {
+  name                           = "gateway-8000"
+  loadbalancer_id                = azurerm_lb.gateway.id
+  protocol                       = "Tcp"
+  frontend_port                  = 8000
+  backend_port                   = 8000
+  frontend_ip_configuration_name = "gateway-public"
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.gateway.id]
+  probe_id                       = azurerm_lb_probe.gateway.id
+}
+
+resource "azurerm_network_interface" "control" {
+  name                = "${local.name_prefix}-control-nic"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.subnet.id
-    private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.pip.id
+    private_ip_address_allocation = "Static"
+    private_ip_address            = "10.0.1.10"
+    public_ip_address_id          = azurerm_public_ip.control_pip.id
   }
 }
 
-resource "azurerm_network_interface_security_group_association" "nsg_assoc" {
-  network_interface_id      = azurerm_network_interface.nic.id
-  network_security_group_id = azurerm_network_security_group.nsg.id
-}
-
-# 6. Azure Database for MySQL Flexible Server
 resource "azurerm_mysql_flexible_server" "mysql" {
   name                   = var.mysql_server_name
   resource_group_name    = azurerm_resource_group.rg.name
@@ -170,25 +237,29 @@ resource "azurerm_mysql_flexible_database" "db" {
   collation           = "utf8_general_ci"
 }
 
-# Allow all Azure services to connect (simplest for demo)
-resource "azurerm_mysql_flexible_server_firewall_rule" "allow_azure" {
-  name                = "allow-azure-services"
+resource "azurerm_mysql_flexible_server_firewall_rule" "allow_control" {
+  name                = "allow-control-plane"
   resource_group_name = azurerm_resource_group.rg.name
   server_name         = azurerm_mysql_flexible_server.mysql.name
-  start_ip_address    = "0.0.0.0"
-  end_ip_address      = "0.0.0.0"
+  start_ip_address    = azurerm_public_ip.control_pip.ip_address
+  end_ip_address      = azurerm_public_ip.control_pip.ip_address
 }
 
-# 7. Virtual Machine
-resource "azurerm_linux_virtual_machine" "vm" {
-  name                = "nomad-demo-node"
+resource "azurerm_mysql_flexible_server_firewall_rule" "allow_nat" {
+  name                = "allow-nomad-workers"
   resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  size                = var.vm_size
-  admin_username      = var.admin_username
-  network_interface_ids = [
-    azurerm_network_interface.nic.id,
-  ]
+  server_name         = azurerm_mysql_flexible_server.mysql.name
+  start_ip_address    = azurerm_public_ip.nat_pip.ip_address
+  end_ip_address      = azurerm_public_ip.nat_pip.ip_address
+}
+
+resource "azurerm_linux_virtual_machine" "control" {
+  name                  = "${local.name_prefix}-control"
+  resource_group_name   = azurerm_resource_group.rg.name
+  location              = azurerm_resource_group.rg.location
+  size                  = var.vm_size
+  admin_username        = var.admin_username
+  network_interface_ids = [azurerm_network_interface.control.id]
 
   admin_ssh_key {
     username   = var.admin_username
@@ -207,18 +278,89 @@ resource "azurerm_linux_virtual_machine" "vm" {
     version   = "latest"
   }
 
-  custom_data = base64encode(templatefile("${path.module}/cloud-init.yaml", {
-    admin_username = var.admin_username
-    mysql_user     = var.mysql_user
-    mysql_password = var.mysql_password
-    mysql_host     = azurerm_mysql_flexible_server.mysql.fqdn
+  custom_data = base64encode(templatefile("${path.module}/cloud-init-control.yaml", {
+    admin_username    = var.admin_username
+    consul_version    = var.consul_version
+    nomad_version     = var.nomad_version
+    vault_version     = var.vault_version
+    mysql_user        = var.mysql_user
+    mysql_password    = var.mysql_password
+    mysql_host        = azurerm_mysql_flexible_server.mysql.fqdn
+    api_gateway_nomad = base64encode(file("${path.module}/../nomad/api-gateway.nomad"))
+    clients_nomad     = base64encode(file("${path.module}/../nomad/clients.nomad"))
+    products_nomad    = base64encode(file("${path.module}/../nomad/products.nomad"))
+    sales_nomad       = base64encode(file("${path.module}/../nomad/sales.nomad"))
   }))
+
+  depends_on = [
+    azurerm_mysql_flexible_database.db,
+    azurerm_mysql_flexible_server_firewall_rule.allow_control,
+    azurerm_mysql_flexible_server_firewall_rule.allow_nat
+  ]
 }
 
-output "public_ip" {
-  value = azurerm_linux_virtual_machine.vm.public_ip_address
+resource "azurerm_linux_virtual_machine_scale_set" "workers" {
+  name                = "${local.name_prefix}-workers"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = var.worker_vm_size
+  instances           = var.worker_count
+  admin_username      = var.admin_username
+
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = var.admin_ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+
+  network_interface {
+    name    = "worker-nic"
+    primary = true
+
+    ip_configuration {
+      name                                   = "internal"
+      primary                                = true
+      subnet_id                              = azurerm_subnet.subnet.id
+      load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.gateway.id]
+    }
+  }
+
+  custom_data = base64encode(templatefile("${path.module}/cloud-init-worker.yaml", {
+    admin_username     = var.admin_username
+    consul_version     = var.consul_version
+    nomad_version      = var.nomad_version
+    control_private_ip = azurerm_network_interface.control.private_ip_address
+  }))
+
+  depends_on = [
+    azurerm_linux_virtual_machine.control,
+    azurerm_subnet_nat_gateway_association.subnet
+  ]
+}
+
+output "control_public_ip" {
+  value = azurerm_public_ip.control_pip.ip_address
+}
+
+output "gateway_public_ip" {
+  value = azurerm_public_ip.gateway_pip.ip_address
 }
 
 output "mysql_host" {
   value = azurerm_mysql_flexible_server.mysql.fqdn
+}
+
+output "ssh_control" {
+  value = "ssh ${var.admin_username}@${azurerm_public_ip.control_pip.ip_address}"
 }
