@@ -261,8 +261,7 @@ resource "azurerm_mysql_flexible_server" "mysql" {
   version                = "8.4"
 
   lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [version]
+    ignore_changes = [version]
   }
 }
 
@@ -273,10 +272,6 @@ resource "azurerm_mysql_flexible_database" "db" {
   server_name         = azurerm_mysql_flexible_server.mysql[0].name
   charset             = "utf8"
   collation           = "utf8_general_ci"
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "azurerm_mysql_flexible_server_configuration" "require_secure_transport" {

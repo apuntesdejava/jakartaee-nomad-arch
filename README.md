@@ -1,65 +1,402 @@
-# JakartaEE / MicroProfile + Quarkus & Nomad Architecture
+# Jakarta EE, Quarkus y HashiCorp Nomad
 
-Este proyecto es una arquitectura moderna orientada a la nube construida sobre un modelo puro de orquestación local en **WSL** (Windows Subsystem for Linux), utilizando el stack de HashiCorp y Docker. 
+Este proyecto demuestra una arquitectura de microservicios Java que puede correr localmente y en Azure usando **Nomad + Consul + Vault + Fabio** como alternativa ligera a AKS para escenarios pequeños y medianos.
 
-Comprende un ecosistema mixto de aplicaciones hechas en el clásico **Payara Micro (JakartaEE)** e implementaciones rápidas en **Quarkus (MicroProfile)**.
+La idea de la demo es sencilla: mantener el modelo de microservicios, service discovery, secrets, gateway, health checks y escalado horizontal, pero con una plataforma operacional más pequeña que Kubernetes.
 
-## 🏗 Arquitectura de Microservicios
+## Componentes
 
-Toda la infraestructura está desacoplada e interconectada en malla vía Service Discovery. Las tecnologías que le dan vida son:
+| Componente            | Tecnología                 | Rol                                                    |
+|-----------------------|----------------------------|--------------------------------------------------------|
+| `clients-hc-example`  | Quarkus JVM                | API de clientes                                        |
+| `products-hc-example` | Quarkus JVM                | API de productos                                       |
+| `sales-hc-example`    | Jakarta EE / Payara Micro  | API de ventas; consume clients/products por REST       |
+| Nomad                 | HashiCorp                  | Scheduler de workloads Docker                          |
+| Consul                | HashiCorp                  | Service discovery y health checks                      |
+| Vault                 | HashiCorp                  | Secretos para credenciales MySQL vía Workload Identity |
+| Fabio                 | Fabio LB                   | API Gateway dinámico basado en tags de Consul          |
+| MySQL                 | Docker local / Azure MySQL | Base de datos común                                    |
+| Terraform             | Azure                      | Infraestructura cloud                                  |
+| Bruno                 | Bruno collection           | Pruebas HTTP por ambiente                              |
 
-### 1. HashiCorp Stack
-- **Nomad**: Actúa como el orquestador principal de cargas de trabajo ejecutando los *Nomad Jobs* que empaquetan a nuestras aplicaciones en el motor de Docker usando el driver integrado.
-- **Consul**: Brinda las herramientas de Service Discovery, observabilidad perimetral y Health Checks para conocer al instante la situación de la topología de red.
-- **Vault**: Proporciona el sistema inyectado de secretos utilizando Workload Identities (JWT) para que los contenedores obtengan sus credenciales de base de datos (`user`, `password`, `url`) desde `kv/data/mysql` sin almacenarlo en texto plano.
+## Arquitectura
 
-### 2. Backends (Aplicaciones)
-- 🛒 `products` **(Quarkus - JVM)**
-- 👥 `clients` **(Quarkus - JVM)**
-- 💳 `sales` **(Payara Micro)**: Se conecta como cliente distribuido hacia `/products/api` y `/clients/api` para compilar ventas.
+```mermaid
+flowchart LR
+    U[Cliente / Bruno / k6] --> G[Fabio API Gateway :8000]
 
-*(Todos corren bajo `network_mode = "host"` acoplando su puerto dinámico `NOMAD_PORT_http` a la red WSL).*
+    subgraph HashiCorp["HashiCorp Runtime"]
+        N[Nomad]
+        C[Consul]
+        V[Vault]
+    end
 
-### 3. API Gateway Edge: FabioLB
-Para simplificar la configuración en modo de desarrollo y evitar los complejos proxies con CNI (Container Networking Interface), este stack ejecuta el robusto **Fabio Load Balancer** (`fabiolb/fabio`). 
-- Escucha pasivamente a Consul, detecta los `tags = ["urlprefix-/..."]` de los HCL jobs y enruta **automáticamente** el tráfico de API de entrada al contenedor correcto. ¡Zero Configuración!
+    G --> C
+    N --> C
+    N --> V
 
-## 🚀 Guía de Operaciones
+    subgraph Apps["Microservicios"]
+        CL[clients-hc-example<br/>Quarkus]
+        PR[products-hc-example<br/>Quarkus]
+        SA[sales-hc-example<br/>Payara Micro]
+    end
 
-### Requisitos previos
-- Windows + WSL2 habilitado.
-- Docker Desktop Integration corriendo en segundo plano activamente para WSL.
+    G -->|/clients| CL
+    G -->|/products| PR
+    G -->|/sales| SA
 
-### 1. Construir las imágenes y empaquetables
-Desde la raíz del proyecto, asegúrate de compilar y abastecer las cargas binarias de tus módulos de Java y construir tus contenedores si dispones tu script de *image build* ejecutando:
-```shell
-mvn clean package -P prod
+    SA -->|REST vía Fabio| G
+
+    CL --> DB[(MySQL)]
+    PR --> DB
+    SA --> DB
 ```
 
-### 2. Iniciar el Clúster e Infraestructura Local
-Si es la **primera vez**, asegúrate de tener todo instalado y los credenciales montados (utilizando los scripts adyacentes de ser necesario como `install-hashicorp.sh` y `setup-vault.sh`).
+En local todo corre en WSL con Docker Desktop. En Azure, Terraform crea un nodo de control y un VM Scale Set de workers:
 
-Para arrancar todo de golpe simplemente ejecuta la utilidad principal (que configurará puertos, limpiará remanentes antiguos, inyectará red/variables en Nomad y levantará cada contenedor):
+```mermaid
+flowchart TB
+    Internet --> LB[Azure Load Balancer<br/>:8000]
+    Admin[Admin browser/SSH] --> CP[Control VM<br/>Nomad Server + Consul Server + Vault]
+
+    subgraph Azure["Azure Resource Group"]
+        CP
+        NAT[NAT Gateway]
+        LB
+
+        subgraph Workers["VM Scale Set: Nomad clients"]
+            W1[Worker 1<br/>Fabio + apps]
+            W2[Worker 2<br/>Fabio + apps]
+            W3[Worker N<br/>Fabio + apps]
+        end
+
+        DB[(Azure Database for MySQL<br/>Flexible Server)]
+    end
+
+    CP --> W1
+    CP --> W2
+    CP --> W3
+    LB --> W1
+    LB --> W2
+    LB --> W3
+    W1 --> NAT
+    W2 --> NAT
+    W3 --> NAT
+    NAT --> DB
+```
+
+## Enrutamiento
+
+Los jobs Nomad registran servicios en Consul con tags `urlprefix`:
+
+| Servicio | Tag Fabio             | URL local/cloud    |
+|----------|-----------------------|--------------------|
+| clients  | `urlprefix-/clients`  | `/clients/api`     |
+| products | `urlprefix-/products` | `/products/api`    |
+| sales    | `urlprefix-/sales`    | `/sales/resources` |
+
+Los puertos de los backends son dinámicos. Fabio descubre el puerto real por Consul, por eso se puede escalar una app sin cambiar URLs públicas.
+
+## Ambiente dev
+
+Útil para desarrollar cada módulo sin levantar todo Nomad.
+
+```bash
+cd clients-hc-example
+./mvnw quarkus:dev
+```
+
+```bash
+cd products-hc-example
+./mvnw quarkus:dev
+```
+
+```bash
+cd sales-hc-example
+./mvnw package -Pdev
+```
+
+En modo dev se usan configuraciones locales, H2 o archivos de setup del módulo. Para probar la arquitectura completa se recomienda `LOCAL_HC`.
+
+## Ambiente Docker / imágenes
+
+Desde la raíz:
+
+```bash
+mvn clean install -Pprod
+```
+
+Con el perfil `prod`, Maven compila los módulos y ejecuta `docker:build` + `docker:push` para:
+
+```text
+docker.io/apuntesdejava/clients-hc-example-jvm:0.0.1
+docker.io/apuntesdejava/products-hc-example-jvm:0.0.1
+docker.io/apuntesdejava/sales-hc-example:0.0.1
+```
+
+Requisito: estar autenticado contra Docker Hub si vas a publicar.
+
+## Ambiente local HashiCorp
+
+Se ejecuta en WSL.
+
+Primera vez:
+
+```bash
+./infra/scripts/install-hashicorp.sh
+```
+
+Arranque completo:
 
 ```bash
 ./infra/scripts/start-local.sh
 ```
 
-El script se encargará de configurar MySQL y levantar las orquestaciones. El proceso dura unos segundos (y un par extra mientrás Payara Micro calienta y Fabio registra los microservicios saludables en Consul).
+Esto levanta:
 
----
+- MySQL por Docker Compose.
+- Vault dev con token `root`.
+- Consul dev.
+- Nomad dev con integración Vault Workload Identity.
+- Jobs Nomad para Fabio, clients, products y sales.
 
-## 🌐 Endpoints y Dashboards
+URLs locales:
 
-Una vez ejecutado tu clúster por completo, podrás acceder desde tu navegador de Windows a:
+```text
+Gateway:   http://localhost:8000
+Nomad UI:  http://localhost:4646
+Consul UI: http://localhost:8500
+Vault UI:  http://localhost:8200
+Fabio UI:  http://localhost:9998
+```
 
-### Puntos de acceso para el usuario / API
-Todo el tráfico debe pasar por Fabio, quien funciona en el puerto unificado `8000`:
-- **Sales API**: [http://localhost:8000/sales](http://localhost:8000/sales)
-- **Products API**: [http://localhost:8000/products](http://localhost:8000/products)
-- **Clients API**: [http://localhost:8000/clients](http://localhost:8000/clients)
+Pruebas rápidas:
 
-### Interfaces Administrativas (UIs)
-- **Consul (Service Discovery & Health)**: [http://localhost:8500](http://localhost:8500)
-- **Nomad (Workload Orchestration)**: [http://localhost:4646](http://localhost:4646)
-- **Fabio (Routing Table Activa)**: [http://localhost:9998](http://localhost:9998)
+```bash
+curl http://localhost:8000/products/api/q/health/ready
+curl http://localhost:8000/clients/api/q/health/ready
+curl http://localhost:8000/sales/resources/sale
+```
+
+## Ambiente Azure
+
+Terraform está en:
+
+```text
+infra/terraform
+```
+
+Configura:
+
+```hcl
+resource_group_name = "jakartaee-nomad-demo-rg"
+location            = "westeurope"
+
+vm_size        = "Standard_D2s_v4"
+worker_vm_size = "Standard_D2s_v4"
+worker_count   = 3
+
+mysql_server_name = "jakartaee-nomad-mysql-v2"
+manage_mysql      = true
+```
+
+Despliegue:
+
+```bash
+cd infra/terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+Outputs esperados:
+
+```text
+control_public_ip
+gateway_public_ip
+mysql_host
+ssh_control
+```
+
+Carga de schema y datos iniciales:
+
+```bash
+cd ../..
+bash ./infra/scripts/seed-azure-db.sh
+```
+
+Este paso ejecuta `infra/mysql/init/init.sql` contra Azure MySQL usando la VM de control como salto SSH. Es intencionalmente explícito para que Terraform cree infraestructura y el sembrado de datos quede como operación de demo.
+
+Si necesitas reiniciar los datos para repetir la presentación:
+
+```bash
+bash ./infra/scripts/seed-azure-db.sh --reset
+```
+
+Verificación:
+
+```bash
+ssh azureuser@<control_public_ip>
+nomad node status
+nomad job status
+consul members
+```
+
+Pruebas por gateway:
+
+```bash
+curl http://<gateway_public_ip>:8000/products/api/q/health/ready
+curl http://<gateway_public_ip>:8000/clients/api/q/health/ready
+curl http://<gateway_public_ip>:8000/sales/resources/sale
+```
+
+### MySQL ya desplegado
+
+Para demos repetidas conviene mantener MySQL vivo y recrear solo Nomad/VMs. El stack soporta:
+
+```hcl
+manage_mysql = false
+```
+
+Si MySQL ya está en el state y quieres dejar de gestionarlo sin destruirlo:
+
+```bash
+terraform state rm 'azurerm_mysql_flexible_server.mysql[0]'
+terraform state rm 'azurerm_mysql_flexible_database.db[0]'
+terraform state rm 'azurerm_mysql_flexible_server_firewall_rule.allow_control[0]'
+terraform state rm 'azurerm_mysql_flexible_server_firewall_rule.allow_nat[0]'
+terraform state rm 'azurerm_mysql_flexible_server_configuration.require_secure_transport[0]'
+```
+
+Nota: para que sobreviva a `terraform destroy`, MySQL debería vivir en otro Resource Group o en otro stack Terraform.
+
+Cuando `manage_mysql = false`, recuerda que Terraform reutiliza el servidor/base, pero no garantiza que existan tablas ni datos. Antes de la demo puedes dejarlo listo con:
+
+```bash
+bash ./infra/scripts/seed-azure-db.sh
+```
+
+## Bruno
+
+La colección está en:
+
+```text
+requests/bruno/Sales-HC
+```
+
+Ambientes:
+
+```text
+LOCAL
+LOCAL_HC
+DOCKER
+AZURE
+```
+
+Para actualizar IPs:
+
+```bash
+cd requests/bruno
+javac UpdateIps.java
+java UpdateIps env=AZURE ip=<gateway_public_ip>
+```
+
+## Escalado manual
+
+Los backends usan puertos dinámicos, así que se pueden escalar varias réplicas:
+
+```bash
+nomad job scale products-backend api 3
+nomad job scale clients-backend api 3
+```
+
+Ver estado:
+
+```bash
+nomad job status products-backend
+consul catalog services
+```
+
+Fabio balancea automáticamente porque lee Consul.
+
+## Pruebas con k6
+
+Ejemplo simple contra gateway:
+
+```javascript
+import http from 'k6/http';
+
+export const options = {
+  vus: 100,
+  duration: '2m',
+};
+
+export default function () {
+  http.get('http://localhost:8000/products/api/product');
+}
+```
+
+Ejecución:
+
+```bash
+k6 run products-hc-example/k6-tests/simple.js
+```
+
+Para Azure cambia `localhost` por `gateway_public_ip`.
+
+## Comparativa de costos: AKS vs HashiCorp
+
+Esta comparación es orientativa. Los precios cambian por región, fecha, moneda, contrato, reservas y ahorro comprometido; para números finales usa Azure Pricing Calculator o la Azure Retail Prices API.
+
+Fuentes oficiales:
+
+- AKS tiene tiers Free, Standard y Premium. Free no cobra gestión del cluster, pero no incluye SLA financiero; Standard/Premium agregan SLA/soporte y se paga además la infraestructura consumida. Ver documentación de AKS pricing tiers.
+- Azure Retail Prices API permite consultar precios públicos por SKU/región.
+- Azure Database for MySQL Flexible Server cobra por compute, storage y backup.
+- NAT Gateway cobra por hora y por GB procesado.
+
+| Concepto          | AKS                                                       | HashiCorp Nomad en VMs               |
+|-------------------|-----------------------------------------------------------|--------------------------------------|
+| Control plane     | Free en AKS Free; pago en Standard/Premium                | VM de control propia                 |
+| Workers           | VMSS/node pools                                           | VMSS Nomad clients                   |
+| Gateway           | Ingress controller / Load Balancer / App Gateway opcional | Fabio + Azure Load Balancer          |
+| Secrets           | Kubernetes Secrets, CSI, Key Vault, etc.                  | Vault Workload Identity              |
+| Service discovery | Kubernetes Services/CoreDNS                               | Consul + Fabio                       |
+| Base de datos     | Azure MySQL igual                                         | Azure MySQL igual                    |
+| Operación         | Kubernetes completo                                       | Nomad/Consul/Vault, menor superficie |
+| Escalado          | HPA/KEDA/Cluster Autoscaler                               | Nomad scale/manual/autoscaler        |
+
+Lectura honesta para la demo:
+
+- Si comparas contra **AKS Free** con los mismos nodos, AKS puede ser igual o incluso más barato en control plane porque Microsoft no cobra el plano de control Free.
+- Si comparas contra un entorno **AKS Standard/production-like**, con SLA de API server, add-ons, ingress, observabilidad y operación Kubernetes, el stack HashiCorp puede ser más barato y simple para equipos pequeños.
+- Nomad no elimina el costo de compute; reduce complejidad y puede permitir una topología más pequeña.
+- Para proyectos medianos, la ventaja aparece cuando no necesitas todo Kubernetes pero sí quieres scheduler, discovery, secrets, rolling deploys y escalado.
+
+Ejemplo de modelo para estimar:
+
+```text
+HashiCorp demo:
+  1 control VM
+  N worker VMs
+  1 Azure Load Balancer
+  1 NAT Gateway
+  1 Azure MySQL Flexible Server
+
+AKS comparable:
+  AKS management tier
+  N worker VMs
+  Load Balancer / Ingress
+  NAT Gateway o salida administrada
+  1 Azure MySQL Flexible Server
+```
+
+La diferencia no está en MySQL ni en los workers; está en cuánto pagas y operas por la plataforma de orquestación alrededor.
+
+## Referencias
+
+- AKS pricing tiers: https://learn.microsoft.com/en-us/azure/aks/free-standard-pricing-tiers
+- Azure Retail Prices API: https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices
+- Azure MySQL Flexible Server pricing: https://azure.microsoft.com/en-us/pricing/details/mysql/
+- Azure MySQL service tiers: https://learn.microsoft.com/en-us/azure/mysql/flexible-server/concepts-service-tiers-storage
+- Azure NAT Gateway pricing: https://azure.microsoft.com/en-us/pricing/details/azure-nat-gateway/
