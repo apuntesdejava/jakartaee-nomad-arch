@@ -5,7 +5,7 @@ set -e
 CONSUL_VERSION="1.22.7" 
 NOMAD_VERSION="2.0.0" 
 VAULT_VERSION="2.0.0"   # opcional, para cuando uses secrets
-TERRAFORM_VERSION="1.14.9"
+TERRAFORM_VERSION="1.15.2"
 
 ARCH="linux_amd64"
 INSTALL_DIR="/usr/local/bin"
