@@ -219,6 +219,13 @@ resource "azurerm_lb_probe" "gateway" {
   port            = 8000
 }
 
+resource "azurerm_lb_probe" "fabio_ui" {
+  name            = "fabio-ui"
+  loadbalancer_id = azurerm_lb.gateway.id
+  protocol        = "Tcp"
+  port            = 9998
+}
+
 resource "azurerm_lb_rule" "gateway" {
   name                           = "gateway-8000"
   loadbalancer_id                = azurerm_lb.gateway.id
@@ -228,6 +235,17 @@ resource "azurerm_lb_rule" "gateway" {
   frontend_ip_configuration_name = "gateway-public"
   backend_address_pool_ids       = [azurerm_lb_backend_address_pool.gateway.id]
   probe_id                       = azurerm_lb_probe.gateway.id
+}
+
+resource "azurerm_lb_rule" "fabio_ui" {
+  name                           = "fabio-9998"
+  loadbalancer_id                = azurerm_lb.gateway.id
+  protocol                       = "Tcp"
+  frontend_port                  = 9998
+  backend_port                   = 9998
+  frontend_ip_configuration_name = "gateway-public"
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.gateway.id]
+  probe_id                       = azurerm_lb_probe.fabio_ui.id
 }
 
 resource "azurerm_network_interface" "control" {
@@ -404,6 +422,10 @@ output "control_public_ip" {
 
 output "gateway_public_ip" {
   value = azurerm_public_ip.gateway_pip.ip_address
+}
+
+output "fabio_ui" {
+  value = "http://${azurerm_public_ip.gateway_pip.ip_address}:9998"
 }
 
 output "mysql_host" {

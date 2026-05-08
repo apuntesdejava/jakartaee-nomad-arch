@@ -208,7 +208,52 @@ nomad job status clients-backend
 
 Fabio seguira resolviendo por Consul sin cambiar URLs.
 
-## 6. Limpieza al terminar
+## 6. Carga y observabilidad en vivo
+
+Abre estas ventanas antes de iniciar la prueba:
+
+- Nomad UI: `http://<control_public_ip>:4646`
+- Consul UI: `http://<control_public_ip>:8500`
+- Fabio UI: `http://<gateway_public_ip>:9998`
+- k6 dashboard: `http://127.0.0.1:5665`
+
+Terminal 1: monitor de infraestructura.
+
+```bash
+cd /mnt/c/proys/nomad/jakartaee-nomad-arch
+bash ./infra/scripts/watch-azure-live.sh
+```
+
+Terminal 2: prueba de carga con dashboard web y reporte HTML.
+
+```bash
+cd /mnt/c/proys/nomad/jakartaee-nomad-arch
+BASE_URL=http://<gateway_public_ip>:8000 \
+PEAK_VUS=120 \
+SALE_RATIO=0.05 \
+K6_WEB_DASHBOARD=true \
+K6_WEB_DASHBOARD_EXPORT=load-tests/k6/report-azure.html \
+k6 run load-tests/k6/live-demo.js
+```
+
+Que mostrar durante la carga:
+
+- En k6: latencia `p95`, errores, requests por segundo y duracion.
+- En Nomad: jobs saludables, allocs corriendo y escalado manual.
+- En Consul: servicios registrados y checks pasando.
+- En Fabio: rutas `/clients`, `/products`, `/sales` y backends disponibles.
+
+Puedes escalar en otra terminal mientras k6 corre:
+
+```bash
+ssh azureuser@<control_public_ip>
+nomad job scale products-backend api 3
+nomad job scale clients-backend api 3
+```
+
+Despues de unos segundos, Consul y Fabio deben mostrar mas instancias disponibles sin cambiar la URL publica.
+
+## 7. Limpieza al terminar
 
 ### Opcion A: borrar absolutamente todo
 
@@ -251,7 +296,7 @@ terraform destroy \
 
 Recuerda: si conservas MySQL, Azure seguira cobrando por el servidor MySQL, almacenamiento y backups.
 
-## 7. Checklist corto
+## 8. Checklist corto
 
 Antes de la demo:
 
