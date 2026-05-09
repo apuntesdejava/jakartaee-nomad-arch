@@ -1,19 +1,12 @@
-variable "project_root" {
-  type    = string
-  default = ""
-}
-
 job "products-backend" {
   datacenters = ["dc1"]
   type        = "service"
 
   group "api" {
-    count = var.instance_count
-
     network {
-      mode = var.network_mode
+      mode = "host"
       port "http" {
-        static = var.network_mode == "host" ? 8082 : 0
+#        static = 8082
         to     = 8080
       }
     }
@@ -49,7 +42,7 @@ EOH
       }
 
       config {
-        image = var.registry != "" ? "${var.registry}/products-hc-example-jvm:0.0.1" :           "quarkus/products-hc-example-jvm:0.0.1"
+        image = "apuntesdejava/products-hc-example-jvm:0.0.1"
         ports = ["http"]
       }
 
@@ -65,19 +58,4 @@ EOH
       }
     }
   }
-}
-
-variable "registry" {
-  type    = string
-  default = ""
-}
-
-variable "network_mode" {
-  type    = string
-  default = "host"
-}
-
-variable "instance_count" {
-  type    = number
-  default = 1
 }

@@ -1,19 +1,14 @@
-variable "project_root" {
-  type    = string
-  default = ""
-}
-
 job "sales-backend" {
   datacenters = ["dc1"]
   type        = "service"
 
   group "web" {
-    count = var.instance_count
+    count = 1
 
     network {
-      mode = var.network_mode
+      mode = "host"
       port "http" {
-        static = var.network_mode == "host" ? 8083 : 0
+#        static = 8083
         to     = 8080
       }
     }
@@ -38,12 +33,30 @@ job "sales-backend" {
         policies = ["nomad-cluster"]
       }
 
-      # Obtenemos la configuración dinámicamente desde Consul KV
       template {
-        data            = "[[ key \"configs/payara-resources\" ]]"
-        destination     = "local/payara-resources.xml"
-        left_delimiter  = "[["
-        right_delimiter = "]]"
+        data = <<EOF
+{{- with secret "kv/data/mysql" -}}
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE resources PUBLIC
+        "-//GlassFish.org//DTD GlassFish Application Server 3.1 Resource Definitions//EN"
+        "http://glassfish.java.net/dtd/glassfish-resources_1_5.dtd">
+<resources>
+    <jdbc-connection-pool
+            name="sales-pool"
+            datasource-classname="com.mysql.cj.jdbc.MysqlDataSource"
+            res-type="javax.sql.DataSource">
+        <property name="url"      value="{{ .Data.data.url | replaceAll "&" "&amp;" }}"/>
+        <property name="user"     value="{{ .Data.data.user }}"/>
+        <property name="password" value="{{ .Data.data.password }}"/>
+    </jdbc-connection-pool>
+
+    <jdbc-resource
+            jndi-name="jdbc/sales"
+            pool-name="sales-pool"/>
+</resources>
+{{- end -}}
+EOF
+        destination = "local/payara-resources.xml"
       }
 
       template {
@@ -56,29 +69,25 @@ EOH
         env         = true
       }
 
-      # El comando es una sola línea, lo generamos aquí para garantizar la ruta /local
       template {
         data        = "add-resources /local/payara-resources.xml"
         destination = "local/post-boot.txt"
       }
 
       config {
-        image = var.registry != "" ? "${var.registry}/sales-hc-example:0.0.1" : "payara/sales-hc-example:0.0.1"
+        image = "apuntesdejava/sales-hc-example:0.0.1"
         ports = ["http"]
         args  = [
           "--postbootcommandfile", "/local/post-boot.txt",
-          "--deploymentDir", "/opt/payara/deployments"
+          "--deploymentDir", "/opt/payara/deployments",
+          "--nocluster"
         ]
       }
 
       env {
-        # En host mode apunta a los puertos estáticos directos
-        # En bridge mode apunta a los upstreams de Envoy
-        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = var.network_mode == "host" ? "http://${attr.unique.network.ip-address}:8082/products/api" : "http://localhost:19080/products/api"
-        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = var.network_mode == "host" ? "http://${attr.unique.network.ip-address}:8081/clients/api"   : "http://localhost:19090/clients/api"
-
-        # Puerto de Payara según el modo
-        PAYARA_ARGS = var.network_mode == "host" ? "--port ${NOMAD_PORT_http} --nocluster" : "--port 8080 --nocluster"
+        COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = "http://${attr.unique.network.ip-address}:8000/products/api"
+        COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = "http://${attr.unique.network.ip-address}:8000/clients/api"
+        PAYARA_ARGS = "--port ${NOMAD_PORT_http} --nocluster"
       }
 
       resources {
@@ -87,19 +96,4 @@ EOH
       }
     }
   }
-}
-
-variable "registry" {
-  type    = string
-  default = ""
-}
-
-variable "network_mode" {
-  type    = string
-  default = "host"
-}
-
-variable "instance_count" {
-  type    = number
-  default = 1
 }

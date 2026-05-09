@@ -1,0 +1,97 @@
+#cloud-config
+package_update: true
+
+runcmd:
+  - |
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip jq docker.io
+
+    systemctl enable docker
+    systemctl start docker
+    usermod -aG docker ${admin_username}
+
+    install_hashicorp() {
+      local name="$1"
+      local version="$2"
+      local zip="/tmp/$${name}.zip"
+
+      curl -fsSL "https://releases.hashicorp.com/$${name}/$${version}/$${name}_$${version}_linux_amd64.zip" -o "$${zip}"
+      unzip -o "$${zip}" -d /tmp
+      install -m 755 "/tmp/$${name}" "/usr/local/bin/$${name}"
+      rm -f "$${zip}" "/tmp/$${name}"
+    }
+
+    install_hashicorp consul "${consul_version}"
+    install_hashicorp nomad "${nomad_version}"
+
+    PRIVATE_IP="$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)"
+
+    mkdir -p /opt/consul /opt/nomad /etc/nomad.d
+
+    cat > /etc/systemd/system/consul.service <<EOF
+    [Unit]
+    Description=Consul Client
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    ExecStart=/usr/local/bin/consul agent -datacenter=dc1 -node=%H -data-dir=/opt/consul -client=0.0.0.0 -bind=$${PRIVATE_IP} -advertise=$${PRIVATE_IP} -retry-join=${control_private_ip}
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+    cat > /etc/nomad.d/nomad.hcl <<EOF
+    datacenter = "dc1"
+    data_dir   = "/opt/nomad"
+    bind_addr  = "0.0.0.0"
+
+    advertise {
+      http = "$${PRIVATE_IP}"
+      rpc  = "$${PRIVATE_IP}"
+      serf = "$${PRIVATE_IP}"
+    }
+
+    server {
+      enabled = false
+    }
+
+    client {
+      enabled = true
+      servers = ["${control_private_ip}:4647"]
+    }
+
+    consul {
+      address = "127.0.0.1:8500"
+    }
+
+    vault {
+      enabled = true
+      address = "http://${control_private_ip}:8200"
+      jwt_auth_backend_path = "jwt-nomad"
+    }
+    EOF
+
+    cat > /etc/systemd/system/nomad.service <<EOF
+    [Unit]
+    Description=Nomad Client
+    After=network-online.target consul.service docker.service
+    Wants=network-online.target
+
+    [Service]
+    ExecStart=/usr/local/bin/nomad agent -config=/etc/nomad.d
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+    systemctl daemon-reload
+    systemctl enable consul nomad
+    systemctl start consul nomad
