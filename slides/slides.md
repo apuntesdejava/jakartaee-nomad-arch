@@ -34,12 +34,12 @@ layout: center
 ---
 
 <div class="claim">
-La pregunta no es si AKS sirve.<br/>
-La pregunta es si todos los proyectos necesitan AKS desde el dia uno.
+La pregunta no es si AKS sirve.<br/><br/>
+La pregunta es si todos los proyectos necesitan AKS desde el día uno.
 </div>
 
 <div class="subclaim">
-Para equipos pequenos y medianos, la plataforma tambien debe ser facil de operar, explicar, repetir y pagar.
+Para equipos pequeños y medianos, la plataforma también debe ser fácil de operar, explicar, repetir y pagar.
 </div>
 
 ---
@@ -54,8 +54,8 @@ Para equipos pequenos y medianos, la plataforma tambien debe ser facil de operar
 
 - Microservicios Java desplegables.
 - Service discovery.
-- Secrets fuera del codigo.
-- Gateway dinamico.
+- Secrets fuera del código.
+- Gateway dinámico.
 - Health checks.
 - Escalado horizontal.
 - Infra reproducible.
@@ -66,9 +66,9 @@ Para equipos pequenos y medianos, la plataforma tambien debe ser facil de operar
 
 ### Lo que queremos evitar
 
-- Operacion innecesariamente compleja.
+- Operación innecesariamente compleja.
 - Plataforma sobredimensionada.
-- Costos dificiles de explicar.
+- Costos difíciles de explicar.
 - Demos que dependen de pasos manuales.
 - Acoplar la app al orquestador.
 
@@ -97,18 +97,18 @@ flowchart LR
 ```
 
 <div class="callout mt-8">
-La demo muestra una evolucion incremental: primero las aplicaciones, luego los contenedores, despues la plataforma local, y finalmente el despliegue cloud.
+La demo muestra una evolución incremental: primero las aplicaciones, luego los contenedores, después la plataforma local, y finalmente el despliegue cloud.
 </div>
 
 ---
 
 # Aplicaciones
 
-| Servicio | Tecnologia | Responsabilidad |
-| --- | --- | --- |
-| `clients-hc-example` | Quarkus JVM | API de clientes |
-| `products-hc-example` | Quarkus JVM | API de productos |
-| `sales-hc-example` | Jakarta EE / Payara Micro | API de ventas; consume clients/products |
+| Servicio              | Tecnologia                | Responsabilidad                         |
+|-----------------------|---------------------------|-----------------------------------------|
+| `clients-hc-example`  | Quarkus JVM               | API de clientes                         |
+| `products-hc-example` | Quarkus JVM               | API de productos                        |
+| `sales-hc-example`    | Jakarta EE / Payara Micro | API de ventas; consume clients/products |
 
 <div class="mt-8">
 
@@ -172,11 +172,11 @@ mvn clean install -Pprod
 
 <div class="mt-8">
 
-| Imagen | Runtime |
-| --- | --- |
-| `apuntesdejava/clients-hc-example-jvm:0.0.1` | Quarkus JVM |
-| `apuntesdejava/products-hc-example-jvm:0.0.1` | Quarkus JVM |
-| `apuntesdejava/sales-hc-example:0.0.1` | Payara Micro |
+| Imagen                                        | Runtime      |
+|-----------------------------------------------|--------------|
+| `apuntesdejava/clients-hc-example-jvm:0.0.1`  | Quarkus JVM  |
+| `apuntesdejava/products-hc-example-jvm:0.0.1` | Quarkus JVM  |
+| `apuntesdejava/sales-hc-example:0.0.1`        | Payara Micro |
 
 </div>
 
@@ -217,16 +217,16 @@ Los jobs registran servicios en Consul con tags:
 tags = ["urlprefix-/products"]
 ```
 
-Fabio lee Consul y enruta automaticamente:
+Fabio lee Consul y enruta automáticamente:
 
-| Ruta publica | Servicio |
-| --- | --- |
-| `/clients/api` | `clients-backend` |
-| `/products/api` | `products-backend` |
-| `/sales/resources` | `sales-backend` |
+| Ruta publica       | Servicio           |
+|--------------------|--------------------|
+| `/clients/api`     | `clients-backend`  |
+| `/products/api`    | `products-backend` |
+| `/sales/resources` | `sales-backend`    |
 
 <div class="callout mt-6">
-Los puertos internos son dinamicos. La URL publica no cambia cuando se escala.
+Los puertos internos son dinamicos. La URL pública no cambia cuando se escala.
 </div>
 
 ---
@@ -243,11 +243,11 @@ sequenceDiagram
     Nomad->>Vault: Workload Identity / JWT
     Vault-->>Nomad: credenciales kv/mysql
     Nomad-->>Job: template secrets.env
-    Job->>MySQL: conexion JDBC
+    Job->>MySQL: conexión JDBC
 ```
 
 <div class="callout mt-6">
-Las credenciales no viven en el codigo ni en la imagen Docker. Nomad las inyecta en tiempo de ejecucion.
+Las credenciales no viven en el código ni en la imagen Docker. Nomad las inyecta en tiempo de ejecución.
 </div>
 
 ---
@@ -299,11 +299,7 @@ fabio_ui
 mysql_host
 ssh_control
 ```
-
-<div class="caption">
-Para la demo, MySQL puede quedar preparado horas antes y recrear solo la infraestructura efimera.
-</div>
-
+ 
 ---
 
 # Seed de datos controlado
@@ -319,11 +315,7 @@ El script:
 - Ejecuta `mysql:9.7` como contenedor temporal.
 - Carga `infra/mysql/init/init.sql`.
 - Evita duplicar datos si ya existen tablas.
-
-<div class="callout warn mt-6">
-Terraform crea infraestructura. El seed puebla la base. Separar ambos pasos hace la demo mas predecible.
-</div>
-
+ 
 ---
 
 # Demo en vivo: orden sugerido
@@ -336,7 +328,7 @@ Terraform crea infraestructura. El seed puebla la base. Separar ambos pasos hace
 6. Probar endpoints por gateway.
 7. Ejecutar carga con k6.
 8. Escalar `products` y `clients`.
-9. Mostrar que la URL publica no cambia.
+9. Mostrar que la URL pública no cambia.
 
 ---
 
@@ -356,10 +348,7 @@ Dashboard:
 ```text
 http://127.0.0.1:5665
 ```
-
-<div class="caption">
-Si k6 corre en WSL, abrir desde Windows con la IP de WSL si `localhost` no responde.
-</div>
+ 
 
 ---
 
@@ -378,7 +367,7 @@ Muestra:
 - Estado de Fabio UI.
 
 <div class="callout mt-6">
-Mientras k6 genera presion, Nomad/Consul/Fabio muestran si la plataforma sigue estable.
+Mientras k6 genera presión, Nomad/Consul/Fabio muestran si la plataforma sigue estable.
 </div>
 
 ---
@@ -392,7 +381,7 @@ nomad job scale products-backend api 3
 nomad job scale clients-backend api 3
 ```
 
-Verificacion:
+Verificación:
 
 ```bash
 nomad job status products-backend
@@ -400,7 +389,7 @@ consul catalog services
 ```
 
 <div class="claim mt-8">
-Mas instancias, misma URL publica.
+Más instancias, misma URL pública.
 </div>
 
 ---
@@ -409,15 +398,15 @@ Mas instancias, misma URL publica.
 
 <div class="compare">
 
-| Tema | AKS | Nomad + Consul + Vault |
-| --- | --- | --- |
-| Control plane | Gestionado por Azure | VM propia |
-| Orquestacion | Kubernetes | Nomad |
-| Discovery | Services/CoreDNS | Consul |
-| Secrets | K8s Secrets / Key Vault / CSI | Vault |
-| Gateway | Ingress / App Gateway | Fabio + Azure LB |
-| Operacion | Mas ecosistema, mas superficie | Menos piezas, menor curva |
-| Mejor para | Plataformas grandes | Proyectos pequenos/medianos |
+| Tema          | AKS                            | Nomad + Consul + Vault      |
+|---------------|--------------------------------|-----------------------------|
+| Control plane | Gestionado por Azure           | VM propia                   |
+| Orquestacion  | Kubernetes                     | Nomad                       |
+| Discovery     | Services/CoreDNS               | Consul                      |
+| Secrets       | K8s Secrets / Key Vault / CSI  | Vault                       |
+| Gateway       | Ingress / App Gateway          | Fabio + Azure LB            |
+| Operacion     | Mas ecosistema, mas superficie | Menos piezas, menor curva   |
+| Mejor para    | Plataformas grandes            | Proyectos pequenos/medianos |
 
 </div>
 
@@ -425,17 +414,17 @@ Mas instancias, misma URL publica.
 
 # Costos: lectura honesta
 
-Suposicion aproximada:
+Suposición aproximada:
 
-| Escenario | Formula | Orden mensual |
-| --- | ---: | ---: |
-| Nomad demo | 1 control + 3 workers | ~4 VMs |
-| AKS Free | 3 workers + control plane free | ~3 VMs |
-| AKS Standard | 3 workers + control plane pago | ~3 VMs + fee |
-| Nomad HA | 3 control + 3 workers | ~6 VMs |
+| Escenario    |                        Formula | Orden mensual |
+|--------------|-------------------------------:|--------------:|
+| Nomad demo   |          1 control + 3 workers |        ~4 VMs |
+| AKS Free     | 3 workers + control plane free |        ~3 VMs |
+| AKS Standard | 3 workers + control plane pago |  ~3 VMs + fee |
+| Nomad HA     |          3 control + 3 workers |        ~6 VMs |
 
 <div class="callout mt-6">
-Contra AKS Standard, Nomad con 1 control VM puede ser competitivo. Contra AKS Free, AKS suele ganar en costo puro. Con Nomad HA, AKS Standard puede ser mas eficiente.
+Contra AKS Standard, Nomad con 1 control VM puede ser competitivo. Contra AKS Free, AKS suele ganar en costo puro. Con Nomad HA, AKS Standard puede ser más eficiente.
 </div>
 
 ---
@@ -452,7 +441,7 @@ Contra AKS Standard, Nomad con 1 control VM puede ser competitivo. Contra AKS Fr
 - Workloads Docker simples.
 - Necesitas discovery/secrets/gateway.
 - Quieres menor complejidad operativa.
-- La plataforma debe explicarse rapido.
+- La plataforma debe explicarse rápido.
 
 </div>
 
@@ -463,7 +452,7 @@ Contra AKS Standard, Nomad con 1 control VM puede ser competitivo. Contra AKS Fr
 - Ya necesitas ecosistema Kubernetes.
 - Requieres HPA/KEDA/CRDs/operators.
 - Muchos equipos comparten plataforma.
-- Necesitas estandar cloud-native amplio.
+- Necesitas estándar cloud-native amplio.
 - Requieres control plane gestionado robusto.
 
 </div>
@@ -480,7 +469,7 @@ Es evitar pagar complejidad antes de necesitarla.
 </div>
 
 <div class="subclaim">
-Para ciertos proyectos Java pequenos y medianos, Nomad + Consul + Vault puede ser suficiente, portable y mas facil de operar.
+Para ciertos proyectos Java pequenos y medianos, Nomad + Consul + Vault puede ser suficiente, portable y más facil de operar.
 </div>
 
 ---
@@ -494,12 +483,12 @@ Lo demostrado:
 - Nomad agenda workloads.
 - Consul descubre servicios.
 - Vault entrega secretos.
-- Fabio enruta dinamicamente.
+- Fabio enruta dinámicamente.
 - Terraform reproduce la infraestructura.
 - k6 valida carga en vivo.
 
 <div class="claim mt-8">
-Una plataforma pequena, entendible y demostrable.
+Una plataforma pequeña, entendible y demostrable.
 </div>
 
 ---
