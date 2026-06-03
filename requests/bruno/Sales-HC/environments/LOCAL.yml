@@ -5,6 +5,6 @@ variables:
   - name: productBaseUrl
     value: http://localhost:8080/products/api
   - name: saleBaseUrl
-    value: http://localhost:8070/sales-app/resources
+    value: http://localhost:8070/sales/resources
   - name: SALES_HOST
     value: http://localhost:8070

@@ -16,3 +16,4 @@
 **/.terraform.tfstate.lock.info
 **/report-azure.html
 dist/
+**/nbactions.xml

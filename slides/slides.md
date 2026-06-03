@@ -401,11 +401,11 @@ Más instancias, misma URL pública.
 | Tema          | AKS                            | Nomad + Consul + Vault      |
 |---------------|--------------------------------|-----------------------------|
 | Control plane | Gestionado por Azure           | VM propia                   |
-| Orquestacion  | Kubernetes                     | Nomad                       |
+| Orquestación  | Kubernetes                     | Nomad                       |
 | Discovery     | Services/CoreDNS               | Consul                      |
 | Secrets       | K8s Secrets / Key Vault / CSI  | Vault                       |
 | Gateway       | Ingress / App Gateway          | Fabio + Azure LB            |
-| Operacion     | Mas ecosistema, mas superficie | Menos piezas, menor curva   |
+| Operación     | Más ecosistema, más superficie | Menos piezas, menor curva   |
 | Mejor para    | Plataformas grandes            | Proyectos pequenos/medianos |
 
 </div>
@@ -416,7 +416,7 @@ Más instancias, misma URL pública.
 
 Suposición aproximada:
 
-| Escenario    |                        Formula | Orden mensual |
+| Escenario    |                        Fórmula | Orden mensual |
 |--------------|-------------------------------:|--------------:|
 | Nomad demo   |          1 control + 3 workers |        ~4 VMs |
 | AKS Free     | 3 workers + control plane free |        ~3 VMs |
@@ -437,7 +437,7 @@ Contra AKS Standard, Nomad con 1 control VM puede ser competitivo. Contra AKS Fr
 
 ### Nomad tiene sentido si
 
-- Equipo pequeno/mediano.
+- Equipo pequeño/mediano.
 - Workloads Docker simples.
 - Necesitas discovery/secrets/gateway.
 - Quieres menor complejidad operativa.
@@ -469,7 +469,7 @@ Es evitar pagar complejidad antes de necesitarla.
 </div>
 
 <div class="subclaim">
-Para ciertos proyectos Java pequenos y medianos, Nomad + Consul + Vault puede ser suficiente, portable y más facil de operar.
+Para ciertos proyectos Java pequeños y medianos, Nomad + Consul + Vault puede ser suficiente, portable y más fácil de operar.
 </div>
 
 ---

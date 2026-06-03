@@ -16,7 +16,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jakartaee-api.version>11.0.0</jakartaee-api.version>
-        <payara.version>7.2026.4</payara.version>
+        <payara.version>7.2026.5</payara.version>
     </properties>
 
     <dependencyManagement>
@@ -35,7 +35,6 @@
         <dependency>
             <groupId>jakarta.platform</groupId>
             <artifactId>jakarta.jakartaee-web-api</artifactId>
-            <version>${jakartaee-api.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
