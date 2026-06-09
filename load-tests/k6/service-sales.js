@@ -2,7 +2,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate } from 'k6/metrics';
 
-const BASE_URL = (__ENV.BASE_URL || 'http://localhost:8070/sales-app/resources').replace(/\/$/, '');
+const BASE_URL = (__ENV.BASE_URL || 'http://localhost:8070/sales/resources').replace(/\/$/, '');
 const VUS = Number(__ENV.VUS || '10');
 const DURATION = __ENV.DURATION || '1m';
 const CREATE_RATIO = Number(__ENV.CREATE_RATIO || '0.05');

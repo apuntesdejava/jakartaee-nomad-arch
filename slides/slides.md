@@ -46,11 +46,11 @@ Para equipos pequeños y medianos, la plataforma también debe ser fácil de ope
 
 # El problema
 
-<div class="grid grid-cols-2 gap-8 mt-8">
-
-<div>
+<div class="grid grid-cols-2 gap-8 mt-8"> 
+<div >
 
 ### Lo que queremos
+<v-clicks>
 
 - Microservicios Java desplegables.
 - Service discovery.
@@ -60,11 +60,13 @@ Para equipos pequeños y medianos, la plataforma también debe ser fácil de ope
 - Escalado horizontal.
 - Infra reproducible.
 
-</div>
-
-<div>
+</v-clicks>
+</div> 
+ 
+<div >
 
 ### Lo que queremos evitar
+<v-clicks>
 
 - Operación innecesariamente compleja.
 - Plataforma sobredimensionada.
@@ -72,7 +74,8 @@ Para equipos pequeños y medianos, la plataforma también debe ser fácil de ope
 - Demos que dependen de pasos manuales.
 - Acoplar la app al orquestador.
 
-</div>
+</v-clicks>
+</div> 
 
 </div>
 
@@ -110,7 +113,7 @@ La demo muestra una evolución incremental: primero las aplicaciones, luego los 
 | `products-hc-example` | Quarkus JVM               | API de productos                        |
 | `sales-hc-example`    | Jakarta EE / Payara Micro | API de ventas; consume clients/products |
 
-<div class="mt-8">
+<div class="mt-6">
 
 ```mermaid
 flowchart LR
