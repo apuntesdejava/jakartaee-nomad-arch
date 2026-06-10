@@ -87,28 +87,28 @@ http://<IP>:9999
 
 ## ✨ Lo Que Hace Automáticamente
 
-| Componente | Estado | Descripción |
-|------------|--------|-------------|
-| **Terraform** | ✅ | Crea VM, redes, NSG, IP pública |
-| **Cloud-init** | ✅ | Instala Docker, HashiCorp stack, Fabio |
-| **MySQL** | ✅ | Docker container con base de datos |
-| **Consul** | ✅ | Service discovery + KV store |
-| **Nomad** | ✅ | Job scheduler con integración Vault |
-| **Vault** | ✅ | Secrets management + JWT auth |
-| **Fabio** | ✅ | Load balancer automático |
-| **Jobs** | ✅ | 3 aplicaciones desplegadas automáticamente |
-| **Config** | ✅ | Consul KV poblado, Vault configurado |
+| Componente     | Estado | Descripción                                |
+|----------------|--------|--------------------------------------------|
+| **Terraform**  | ✅      | Crea VM, redes, NSG, IP pública            |
+| **Cloud-init** | ✅      | Instala Docker, HashiCorp stack, Fabio     |
+| **MySQL**      | ✅      | Docker container con base de datos         |
+| **Consul**     | ✅      | Service discovery + KV store               |
+| **Nomad**      | ✅      | Job scheduler con integración Vault        |
+| **Vault**      | ✅      | Secrets management + JWT auth              |
+| **Fabio**      | ✅      | Load balancer automático                   |
+| **Jobs**       | ✅      | 3 aplicaciones desplegadas automáticamente |
+| **Config**     | ✅      | Consul KV poblado, Vault configurado       |
 
 ## 🎯 Beneficios vs AKS
 
-| Aspecto | Este Setup | AKS |
-|---------|------------|-----|
-| **Complejidad** | ⚠️ Media (Terraform) | ❌ Alta (Kubernetes) |
-| **Costo** | ✅ $65/mes | ❌ $150-300/mes |
-| **Tiempo Deploy** | ✅ 20 min | ❌ 1-2 horas |
-| **Mantenimiento** | ✅ Bajo | ❌ Alto |
-| **Dev Experience** | ✅ Excelente | ⚠️ Complejo |
-| **Escalabilidad** | ✅ Nomad clusters | ✅ Kubernetes |
+| Aspecto            | Este Setup           | AKS                 |
+|--------------------|----------------------|---------------------|
+| **Complejidad**    | ⚠️ Media (Terraform) | ❌ Alta (Kubernetes) |
+| **Costo**          | ✅ $65/mes            | ❌ $150-300/mes      |
+| **Tiempo Deploy**  | ✅ 20 min             | ❌ 1-2 horas         |
+| **Mantenimiento**  | ✅ Bajo               | ❌ Alto              |
+| **Dev Experience** | ✅ Excelente          | ⚠️ Complejo         |
+| **Escalabilidad**  | ✅ Nomad clusters     | ✅ Kubernetes        |
 
 ## 📋 Requisitos
 

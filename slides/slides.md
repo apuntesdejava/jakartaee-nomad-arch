@@ -103,6 +103,10 @@ flowchart LR
 La demo muestra una evolución incremental: primero las aplicaciones, luego los contenedores, después la plataforma local, y finalmente el despliegue cloud.
 </div>
 
+<!--
+No usaremos Spring Boot, usaremos Jakarta EE + Microprofile: Quarkus + Payara Micro
+-->
+
 ---
 
 # Aplicaciones
@@ -124,7 +128,12 @@ flowchart LR
     SA --> DB
 ```
 
+
 </div>
+
+<!--
+Cada aplicación está hecha cumpliendo una arquitectura hexagonal pragmática
+-->
 
 ---
 
@@ -154,12 +163,16 @@ cd products-hc-example
 ./mvnw quarkus:dev
 
 cd sales-hc-example
-./mvnw package -Pdev
+./mvnw package payara-micro:dev
 ```
 
 </div>
 
 </div>
+
+<!--
+Aquí simularemos que cada aplicación es desarrollada de manera aislada por programadores diferentes. Están aislados, así que tienen bases de datos aislados
+-->
 
 ---
 
@@ -229,7 +242,7 @@ Fabio lee Consul y enruta automáticamente:
 | `/sales/resources` | `sales-backend`    |
 
 <div class="callout mt-6">
-Los puertos internos son dinamicos. La URL pública no cambia cuando se escala.
+Los puertos internos son dinámicos. La URL pública no cambia cuando se escala.
 </div>
 
 ---
@@ -505,4 +518,32 @@ Una plataforma pequeña, entendible y demostrable.
 - Consul: `developer.hashicorp.com/consul`
 - Vault: `developer.hashicorp.com/vault`
 - k6 Web Dashboard: `grafana.com/docs/k6/latest/results-output/web-dashboard/`
+
+---
+
+# Recursos disponibles
+
+<div class="grid grid-cols-2 gap-8 mt-8 items-start">
+
+<div>
+
+<div class="flex flex-col gap-4">
+  <div class="flex items-center gap-3"><span class="i-ph-article text-2xl"></span><span>Blog: apuntesdejava.com</span></div>
+  <div class="flex items-center gap-3"><span class="i-ph-youtube-logo text-2xl"></span><span>youtube.com/@apuntesdejava</span></div>
+  <div class="flex items-center gap-3"><span class="i-ph-x-logo text-2xl"></span><span>x.com/apuntesdejava</span></div>
+  <div class="flex items-center gap-3"><span class="i-ph-github-logo text-2xl"></span><span>GitHub.com/apuntesdejava</span></div>
+  <div class="flex items-center gap-3"><span class="i-ph-tiktok-logo text-2xl"></span><span>TikTok @apuntesdejava</span></div>
+  <div class="flex items-center gap-3"><span class="i-ph-instagram-logo text-2xl"></span><span>Instagram @apuntesdejava</span></div>
+</div>
+
+</div>
+
+<div class="text-center">
+
+Proyecto:<br/>
+<img src="./jakartaeenomadarch.png" width="70%" />
+
+</div>
+
+</div>
 
