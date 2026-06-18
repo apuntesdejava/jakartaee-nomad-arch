@@ -26,6 +26,20 @@ BASE_URL=http://localhost:8000/clients/api  k6 run load-tests/k6/service-clients
 BASE_URL=http://localhost:8000/sales/resources k6 run load-tests/k6/service-sales.js
 ```
 
+## PowerShell
+
+```powershell
+$env:BASE_URL = "http://localhost:8000/products/api"; k6 run load-tests/k6/service-products.js
+$env:BASE_URL = "http://localhost:8000/clients/api"; k6 run load-tests/k6/service-clients.js
+$env:BASE_URL = "http://localhost:8000/sales/resources"; k6 run load-tests/k6/service-sales.js
+```
+
+Con parametros:
+
+```powershell
+$env:VUS = "20"; $env:DURATION = "2m"; $env:CREATE_RATIO = "0.02"; k6 run load-tests/k6/service-products.js
+```
+
 ## Parametros
 
 ```bash

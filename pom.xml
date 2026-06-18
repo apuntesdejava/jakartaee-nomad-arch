@@ -21,8 +21,12 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>21</maven.compiler.release>
-        <quarkus.platform.version>3.36.1</quarkus.platform.version>
         <docker.registry>docker.io/apuntesdejava</docker.registry>
+
+<!-- Quarkus -->
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.version>3.36.2</quarkus.platform.version>
 
         <!-- Herramientas de generación de código -->
         <lombok.version>1.18.46</lombok.version>
@@ -34,7 +38,7 @@
         <surefire-plugin.version>3.5.5</surefire-plugin.version>
         <docker-maven-plugin.version>0.48.1</docker-maven-plugin.version>
         <maven-war-plugin.version>3.5.1</maven-war-plugin.version>
-        <maven-dependency-plugin.version>3.10.0</maven-dependency-plugin.version>
+        <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
 
         <mysql.version>9.7.0</mysql.version>
     </properties>
