@@ -1,0 +1,341 @@
+#cloud-config
+package_update: true
+
+runcmd:
+  # 1. Esperar red y reintentar apt-get
+  - |
+    echo "Esperando a que la red esté lista..."
+    until ping -c 1 8.8.8.8; do sleep 2; done
+    
+    export DEBIAN_FRONTEND=noninteractive
+    for i in {1..5}; do
+      apt-get update && \
+      apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release docker.io unzip mysql-client && \
+      break || (echo "Reintentando instalación de paquetes..." && sleep 10)
+    done
+
+  # 2. Configurar Docker
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ${admin_username}
+  - echo "127.0.0.1 host.docker.internal" >> /etc/hosts
+
+  # 3. Instalar HashiCorp Stack con sintaxis de escape corregida
+  - |
+    set -e
+    NOMAD_VER="1.7.5"
+    CONSUL_VER="1.17.3"
+    VAULT_VER="1.15.6"
+    
+    mkdir -p /tmp/hashicorp_downloads
+    cd /tmp/hashicorp_downloads
+    
+    # Nomad
+    curl -LO "https://releases.hashicorp.com/nomad/$${NOMAD_VER}/nomad_$${NOMAD_VER}_linux_amd64.zip"
+    unzip -o "nomad_$${NOMAD_VER}_linux_amd64.zip" && mv nomad /usr/local/bin/
+    
+    # Consul
+    curl -LO "https://releases.hashicorp.com/consul/$${CONSUL_VER}/consul_$${CONSUL_VER}_linux_amd64.zip"
+    unzip -o "consul_$${CONSUL_VER}_linux_amd64.zip" && mv consul /usr/local/bin/
+    
+    # Vault
+    curl -LO "https://releases.hashicorp.com/vault/$${VAULT_VER}/vault_$${VAULT_VER}_linux_amd64.zip"
+    unzip -o "vault_$${VAULT_VER}_linux_amd64.zip" && mv vault /usr/local/bin/
+    
+    chmod +x /usr/local/bin/nomad /usr/local/bin/consul /usr/local/bin/vault
+    cd / && rm -rf /tmp/hashicorp_downloads
+
+  # 4. Configuración de Servicios (Systemd)
+  - |
+    # Obtenemos la IP de nuevo por seguridad
+    PRIVATE_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+    
+    cat <<EOF > /etc/systemd/system/consul.service
+    [Unit]
+    Description=Consul Agent
+    After=network.target
+    [Service]
+    ExecStart=/usr/local/bin/consul agent -dev -client=0.0.0.0 -bind=$${PRIVATE_IP} -advertise=$${PRIVATE_IP}
+    Restart=always
+    EOF
+
+    cat <<EOF > /etc/systemd/system/vault.service
+    [Unit]
+    Description=Vault Server
+    After=network.target
+    [Service]
+    ExecStart=/usr/local/bin/vault server -dev -dev-root-token-id="root" -dev-listen-address="0.0.0.0:8200"
+    Restart=always
+    EOF
+
+    mkdir -p /etc/nomad.d
+    cat <<EOF > /etc/nomad.d/vault.hcl
+    vault {
+      enabled = true
+      address = "http://127.0.0.1:8200"
+      token   = "root"
+    }
+    EOF
+
+    cat <<EOF > /etc/systemd/system/nomad.service
+    [Unit]
+    Description=Nomad Agent
+    After=network.target consul.service vault.service
+    [Service]
+    ExecStart=/usr/local/bin/nomad agent -dev -config=/etc/nomad.d/vault.hcl -bind=0.0.0.0 -network-interface=eth0
+    Restart=always
+    EOF
+
+    systemctl daemon-reload
+    systemctl enable consul vault nomad
+    systemctl start consul vault nomad
+
+  # 5. Configurar Vault (MySQL Azure)
+  - |
+    export VAULT_ADDR='http://127.0.0.1:8200'
+    export VAULT_TOKEN='root'
+    
+    # Obtener IP privada para la configuración
+    PRIVATE_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+
+    # Esperar a que Vault responda
+    for i in {1..30}; do
+      curl -s $${VAULT_ADDR}/v1/sys/health > /dev/null && break || sleep 2
+    done
+    
+    vault secrets enable -path=kv kv-v2 || true
+    vault kv put kv/mysql user="${mysql_user}" password="${mysql_password}" url="jdbc:mysql://${mysql_host}:3306/appdb?useSSL=true&trustServerCertificate=true&allowPublicKeyRetrieval=true"
+    
+    vault auth enable jwt || true
+
+    # Esperar a que el endpoint JWKS de Nomad esté realmente listo (200 OK)
+    echo "Esperando a que Nomad JWKS en http://$${PRIVATE_IP}:4646 esté disponible..."
+    for i in {1..60}; do
+      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" http://$${PRIVATE_IP}:4646/.well-known/jwks.json)
+      if [ "$HTTP_CODE" = "200" ]; then
+        echo "Nomad JWKS listo!"
+        break
+      fi
+      echo "Nomad JWKS no listo (HTTP $HTTP_CODE), reintentando en 5s..."
+      sleep 5
+    done
+
+    vault write auth/jwt/config jwks_url="http://$${PRIVATE_IP}:4646/.well-known/jwks.json" jwt_supported_algs="RS256" default_role="nomad-cluster"
+    
+    vault write auth/jwt/role/nomad-cluster - <<EOF
+    {
+      "role_type": "jwt",
+      "bound_audiences": ["vault.io"],
+      "user_claim": "nomad_job_id",
+      "token_policies": ["nomad-cluster"],
+      "token_type": "service",
+      "bound_claims": { "nomad_namespace": "default" }
+    }
+    EOF
+    
+    vault policy write nomad-cluster - <<EOF
+    path "kv/data/mysql" { capabilities = ["read"] }
+    path "auth/token/renew-self" { capabilities = ["update"] }
+    path "auth/token/lookup-self" { capabilities = ["read"] }
+    EOF
+
+  # 6. Preparar Jobs de Nomad
+  - mkdir -p /opt/nomad-jobs
+  
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/api-gateway.nomad
+    job "api-gateway" {
+      datacenters = ["dc1"]
+      type = "system"
+      group "fabio" {
+        network {
+          mode = "host"
+          port "lb" { static = 8000 }
+          port "ui" { static = 9998 }
+        }
+        task "fabio" {
+          driver = "docker"
+          config {
+            image = "fabiolb/fabio:1.7.0"
+            ports = ["lb", "ui"]
+          }
+          env {
+            FABIO_REGISTRY_CONSUL_ADDR = "$${attr.unique.network.ip-address}:8500"
+            FABIO_PROXY_ADDR = ":8000"
+          }
+        }
+      }
+    }
+    EOF
+
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/clients.nomad
+    job "clients-backend" {
+      datacenters = ["dc1"]
+      type = "service"
+      group "api" {
+        network {
+          mode = "host"
+          port "http" { static = 8081 }
+        }
+        service {
+          name = "clients-backend"
+          port = "http"
+          tags = ["urlprefix-/clients"]
+          check {
+            type = "http"
+            path = "/clients/api/q/health/ready"
+            interval = "10s"
+            timeout = "3s"
+          }
+        }
+        task "clients" {
+          driver = "docker"
+          vault { policies = ["nomad-cluster"] }
+          template {
+            data = "QUARKUS_DATASOURCE_USERNAME=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.user }}{{ end }}\"\nQUARKUS_DATASOURCE_PASSWORD=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.password }}{{ end }}\"\nQUARKUS_DATASOURCE_JDBC_URL=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.url }}{{ end }}\""
+            destination = "local/secrets.env"
+            env = true
+          }
+          config {
+            image = "apuntesdejava/clients-hc-example-jvm:0.0.1"
+            network_mode = "host"
+          }
+          env {
+            QUARKUS_HTTP_PORT = "8081"
+            QUARKUS_HTTP_HOST = "$${attr.unique.network.ip-address}"
+            QUARKUS_DATASOURCE_DB_KIND = "mysql"
+          }
+        }
+      }
+    }
+    EOF
+
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/products.nomad
+    job "products-backend" {
+      datacenters = ["dc1"]
+      type = "service"
+      group "api" {
+        network {
+          mode = "host"
+          port "http" { static = 8082 }
+        }
+        service {
+          name = "products-backend"
+          port = "http"
+          tags = ["urlprefix-/products"]
+          check {
+            type = "http"
+            path = "/products/api/q/health/ready"
+            interval = "10s"
+            timeout = "3s"
+          }
+        }
+        task "products" {
+          driver = "docker"
+          vault { policies = ["nomad-cluster"] }
+          template {
+            data = "QUARKUS_DATASOURCE_USERNAME=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.user }}{{ end }}\"\nQUARKUS_DATASOURCE_PASSWORD=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.password }}{{ end }}\"\nQUARKUS_DATASOURCE_JDBC_URL=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.url }}{{ end }}\""
+            destination = "local/secrets.env"
+            env = true
+          }
+          config {
+            image = "apuntesdejava/products-hc-example-jvm:0.0.1"
+            network_mode = "host"
+          }
+          env {
+            QUARKUS_HTTP_PORT = "8082"
+            QUARKUS_HTTP_HOST = "$${attr.unique.network.ip-address}"
+            QUARKUS_DATASOURCE_DB_KIND = "mysql"
+          }
+        }
+      }
+    }
+    EOF
+
+  - |
+    cat <<'EOF' > /opt/nomad-jobs/sales.nomad
+    job "sales-backend" {
+      datacenters = ["dc1"]
+      type = "service"
+      group "web" {
+        network {
+          mode = "host"
+          port "http" { static = 8083 }
+        }
+        service {
+          name = "sales-backend"
+          port = "http"
+          tags = ["urlprefix-/sales"]
+          check {
+            type = "http"
+            path = "/health"
+            interval = "10s"
+            timeout = "5s"
+          }
+        }
+        task "sales" {
+          driver = "docker"
+          vault { policies = ["nomad-cluster"] }
+          resources {
+            cpu    = 500
+            memory = 768
+          }
+          template {
+            data = "[[key \"configs/payara-resources\"]]\n"
+            destination = "local/payara-resources.xml"
+            left_delimiter = "[["
+            right_delimiter = "]]"
+          }
+          template {
+            data = "DB_USER=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.user }}{{ end }}\"\nDB_PASSWORD=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.password }}{{ end }}\"\nJDBC_URL=\"{{ with secret \"kv/data/mysql\" }}{{ .Data.data.url }}{{ end }}\""
+            destination = "local/secrets.env"
+            env = true
+          }
+          template {
+            data = "add-resources /local/payara-resources.xml"
+            destination = "local/post-boot.txt"
+          }
+          config {
+            image = "apuntesdejava/sales-hc-example:0.0.1"
+            network_mode = "host"
+            args = [
+              "--postbootcommandfile", "/local/post-boot.txt",
+              "--deploymentDir", "/opt/payara/deployments"
+            ]
+          }
+          env {
+            COM_APUNTESDEJAVA_SALES_SERVICES_PRODUCTSERVICE_MP_REST_URL = "http://$${attr.unique.network.ip-address}:8082/products/api"
+            COM_APUNTESDEJAVA_SALES_SERVICES_CLIENTSERVICE_MP_REST_URL  = "http://$${attr.unique.network.ip-address}:8081/clients/api"
+            PAYARA_ARGS = "--port 8083 --nocluster"
+          }
+        }
+      }
+    }
+    EOF
+
+  # 7. Script de Despliegue Automático
+  - |
+    cat <<'EOF' > /opt/setup-nomad-jobs.sh
+    #!/bin/bash
+    set -e
+    # Esperar a que Nomad esté realmente listo
+    for i in {1..30}; do
+      /usr/local/bin/nomad status &>/dev/null && break || sleep 5
+    done
+    
+    # Intentar descargar el recurso de Payara, si falla usar un default vacío
+    curl -fsSL https://raw.githubusercontent.com/apuntesdejava/jakartaee-nomad-arch/main/sales-hc-example/local-setup/payara-resources-prod.xml -o /opt/payara-resources-prod.xml || echo "<resources/>" > /opt/payara-resources-prod.xml
+    
+    /usr/local/bin/consul kv put configs/payara-resources "$(cat /opt/payara-resources-prod.xml)"
+    
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/api-gateway.nomad
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/clients.nomad
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/products.nomad
+    /usr/local/bin/nomad job run -detach /opt/nomad-jobs/sales.nomad
+    EOF
+    chmod +x /opt/setup-nomad-jobs.sh
+
+  # 8. Ejecutar Despliegue Final
+  - /opt/setup-nomad-jobs.sh

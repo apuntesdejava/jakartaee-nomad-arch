@@ -1,0 +1,10 @@
+name: LOCAL_HC
+variables:
+  - name: productBaseUrl
+    value: http://172.26.124.97:8000/products/api
+  - name: clientBaseUrl
+    value: http://172.26.124.97:8000/clients/api
+  - name: SALES_HOST
+    value: http://172.26.124.97:8000/
+  - name: saleBaseUrl
+    value: http://172.26.124.97:8000/sales/resources

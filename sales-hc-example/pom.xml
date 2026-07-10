@@ -16,7 +16,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jakartaee-api.version>11.0.0</jakartaee-api.version>
-        <payara.version>7.2026.2</payara.version>
+        <payara.version>7.2026.5</payara.version>
     </properties>
 
     <dependencyManagement>
@@ -35,7 +35,6 @@
         <dependency>
             <groupId>jakarta.platform</groupId>
             <artifactId>jakarta.jakartaee-web-api</artifactId>
-            <version>${jakartaee-api.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -160,6 +159,9 @@
         </profile>
         <profile>
             <id>prod</id>
+            <properties>
+                <maven.deploy.skip>true</maven.deploy.skip>
+            </properties>
             <dependencies>
                 <dependency>
                     <groupId>com.mysql</groupId>
@@ -172,11 +174,26 @@
                     <plugin>
                         <groupId>io.fabric8</groupId>
                         <artifactId>docker-maven-plugin</artifactId>
-
                         <configuration>
                             <images>
                                 <image>
-                                    <name>payara/${project.artifactId}:${project.version}</name>
+                                    <name>${docker.registry}/${project.artifactId}:${project.version}</name>
+                                    <build>
+                                        <from>docker.io/payara/micro:${payara.version}-jdk25</from>
+                                        <assemblies>
+                                            <assembly>
+                                                <name>maven</name>
+                                                <descriptorRef>artifact</descriptorRef>
+                                                <targetDir>/opt/payara/deployments</targetDir>
+                                            </assembly>
+                                        </assemblies>
+                                        <cmd>
+                                            <arg>--deployDir</arg>
+                                            <arg>/opt/payara/deployments</arg>
+                                            <arg>--contextRoot</arg>
+                                            <arg>/</arg>
+                                        </cmd>
+                                    </build>
                                 </image>
                             </images>
                         </configuration>

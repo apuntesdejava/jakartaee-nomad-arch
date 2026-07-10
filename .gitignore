@@ -1,4 +1,5 @@
 **/target
+**/node_modules
 **/.idea
 **/*.iml
 **/nb-configuration.xml
@@ -6,3 +7,13 @@
 **/*-REPORT.md
 **/.vscode
 /cni-plugins.tgz
+**/.terraform
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/tfplan
+**/terraform.tfstate.backup
+**/terraform.tfstate.*.backup
+**/.terraform.tfstate.lock.info
+**/report-azure.html
+dist/
+**/nbactions.xml

@@ -1,32 +1,48 @@
+# Job de Nomad para Fabio, el gateway HTTP dinámico.
+# Fabio observa el catálogo de Consul y crea rutas automáticamente a partir de
+# tags como urlprefix-/clients, urlprefix-/products y urlprefix-/sales.
 job "api-gateway" {
+  # type = "system" significa que Nomad ejecuta una instancia por cada cliente
+  # elegible. En local hay un solo cliente, asi que queda un Fabio.
   datacenters = ["dc1"]
-  type        = "service"
+  type        = "system"
 
-  group "gateway" {
-    count = 1
-
+  # Grupo que contiene la tarea Fabio y sus puertos públicos.
+  group "fabio" {
+    # Fabio necesita puertos estáticos porque es la entrada pública de la demo:
+    # 8000 para trafico API y 9998 para la UI de Fabio.
     network {
-      mode = var.network_mode
-      port "public" {
-        static = 8080
-        to     = 8080
+      mode = "host"
+      port "lb" {
+        static = 8000
+      }
+      port "ui" {
+        static = 9998
       }
     }
 
-    service {
-      name = "api-gateway"
-      port = "public"
+    # Tarea Docker con la imagen oficial de Fabio.
+    task "fabio" {
+      driver = "docker"
+      
+      # Expone los puertos declarados en network hacia el contenedor.
+      config {
+        image = "fabiolb/fabio:1.7.0"
+        ports = ["lb", "ui"]
+      }
 
-      connect {
-        gateway {
-          proxy {}
-        }
+      # Fabio se conecta a Consul en el host local del nodo. Desde Consul lee los
+      # servicios saludables y sus tags urlprefix para construir la tabla de rutas.
+      env {
+        FABIO_REGISTRY_CONSUL_ADDR = "${attr.unique.network.ip-address}:8500"
+        FABIO_PROXY_ADDR = ":8000"
+      }
+
+      # Gateway ligero: reserva pocos recursos en comparación con los backends.
+      resources {
+        cpu    = 200
+        memory = 128
       }
     }
   }
-}
-
-variable "network_mode" {
-  type    = string
-  default = "host"
 }
