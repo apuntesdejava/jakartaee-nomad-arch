@@ -1,5 +1,0 @@
-@import './node_modules/slidev-theme-nord/styles/nord-theme.css';
-
-#slidev-goto-dialog {
-  display: none !important;
-}

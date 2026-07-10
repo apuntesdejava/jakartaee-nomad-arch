@@ -467,21 +467,7 @@ Para costos:
 - Nomad HA requiere más VMs de control y cambia la comparación.
 - MySQL, NAT Gateway, Load Balancer y workers existen en ambos escenarios; la diferencia está en la plataforma de orquestación alrededor.
 
-## Slides
 
-La presentación está en:
-
-```text
-slides/slides.md
-```
-
-Para ejecutarla:
-
-```bash
-cd slides
-npm install
-npm run dev
-```
 
 ## Recursos
 
