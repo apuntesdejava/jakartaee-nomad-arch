@@ -431,20 +431,7 @@ consul catalog services
 ```
 
 Fabio balancea automáticamente porque lee Consul. Más instancias, misma URL pública.
-
-## Demo sugerida
-
-1. Mostrar la motivación: no todo proyecto necesita Kubernetes desde el primer día.
-2. Ejecutar o revisar los microservicios en localhost.
-3. Construir las imágenes Docker.
-4. Levantar el stack HashiCorp local.
-5. Mostrar Nomad UI, Consul UI, Vault y Fabio.
-6. Desplegar o revisar Terraform en Azure.
-7. Cargar datos con `seed-azure-db.sh`.
-8. Probar endpoints por gateway.
-9. Ejecutar carga con k6.
-10. Escalar `products` y `clients`.
-11. Mostrar que la URL pública no cambia.
+ 
 
 ## AKS vs Nomad: lectura honesta
 
@@ -467,6 +454,62 @@ Para costos:
 - Nomad HA requiere más VMs de control y cambia la comparación.
 - MySQL, NAT Gateway, Load Balancer y workers existen en ambos escenarios; la diferencia está en la plataforma de orquestación alrededor.
 
+## Podman on Windows
+
+This project uses the Fabric8 `docker-maven-plugin` to build and push container images during:
+
+```powershell
+mvn clean install -Pprod
+```
+
+When using Podman instead of Docker Desktop on Windows, Fabric8 must connect to Podman's Docker-compatible API.
+
+Start the Podman machine first:
+
+```powershell
+podman machine start
+```
+
+Then configure `DOCKER_HOST` in the same PowerShell session:
+
+```powershell
+$Env:DOCKER_HOST = "npipe:////./pipe/podman-machine-default"
+```
+
+Verify it with:
+
+```powershell
+$Env:DOCKER_HOST
+```
+
+Expected value:
+
+```text
+npipe:////./pipe/podman-machine-default
+```
+
+After that, the normal Maven build can be executed:
+
+```powershell
+mvn clean install -Pprod
+```
+
+> **Note:** `DOCKER_HOST` is set only for the current PowerShell session. If a new terminal is opened, set it again before running Maven.
+
+Podman itself may report that Docker-compatible API forwarding is available through:
+
+```text
+npipe:////./pipe/docker_engine
+```
+
+However, on some Windows environments Fabric8 may fail with:
+
+```text
+\\.\pipe\docker_engine
+Todas las instancias de canalización están en uso
+```
+
+Using the Podman-specific named pipe through `DOCKER_HOST` avoids that issue.
 
 
 ## Recursos
