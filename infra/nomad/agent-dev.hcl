@@ -1,6 +1,14 @@
 # Configuración adicional del agente Nomad local para integrarse con Vault.
 # start-local.sh arranca Vault dev en 127.0.0.1:8200 y luego inicia Nomad con
 # este archivo mediante "-config=infra/nomad/agent-dev.hcl".
+plugin_dir = "/opt/nomad/plugins"
+
+plugin "nomad-driver-podman" {
+  config {
+    socket_path = "unix:///run/user/1000/podman/podman.sock"
+  }
+}
+
 vault {
   # Activa la integración Nomad/Vault para que los jobs puedan usar bloques
   # "vault" y templates con la función secret.

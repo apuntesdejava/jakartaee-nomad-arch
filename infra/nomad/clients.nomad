@@ -46,7 +46,7 @@ job "clients-backend" {
     # Tarea principal del grupo. Nomad usara el driver Docker para descargar y
     # ejecutar la imagen JVM de Quarkus.
     task "clients" {
-      driver = "docker"
+      driver = "podman"
 
       # Permite que esta tarea pida secretos a Vault usando la policy indicada.
       # start-local.sh configura Vault y la integración Workload Identity antes
@@ -70,7 +70,7 @@ EOH
       # Configuración específica del driver Docker: imagen a ejecutar y puertos
       # definidos en el bloque network que deben exponerse al contenedor.
       config {
-        image = "apuntesdejava/clients-hc-example-jvm:0.0.1"
+        image = "docker.io/apuntesdejava/clients-hc-example-jvm:0.0.1"
         ports = ["http"]
       }
 

@@ -42,7 +42,7 @@ job "sales-backend" {
 
     # Tarea Docker que ejecuta la imagen Payara Micro con el WAR de sales.
     task "sales" {
-      driver = "docker"
+      driver = "podman"
 
       # Habilita el acceso de esta tarea a Vault con la policy creada para Nomad.
       vault {
@@ -99,7 +99,7 @@ EOH
       # Configuracion del contenedor Payara: imagen, puerto y argumentos de
       # arranque. --deploymentDir despliega el WAR incluido en la imagen.
       config {
-        image = "apuntesdejava/sales-hc-example:0.0.1"
+        image = "docker.io/apuntesdejava/sales-hc-example:0.0.1"
         ports = ["http"]
         args  = [
           "--postbootcommandfile", "/local/post-boot.txt",

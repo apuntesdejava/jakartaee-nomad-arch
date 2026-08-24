@@ -69,17 +69,9 @@ sleep 2
 # ── 1. MySQL ─────────────────────────────────────────────────
 echo "── 1. Preparando MySQL..."
 
-
-# Cuando Podman está instalado en Windows, NO ejecutamos
-# "podman.exe compose" desde WSL.
-#
-# El proveedor Compose es un ejecutable Windows y las rutas
-# /mnt/c/... pueden ser interpretadas incorrectamente como
-# C:\mnt\c\...
-#
-# En ese caso MySQL debe levantarse previamente desde PowerShell.
-#
-if [ "$CONTAINER_RUNTIME" = "podman.exe" ]; then
+# En WSL, si tenemos acceso a Podman Windows, MySQL se administra
+# desde PowerShell para evitar problemas de rutas con Compose.
+if command -v podman.exe &>/dev/null; then
 
   echo "── Verificando MySQL en Podman Windows..."
 
@@ -103,35 +95,50 @@ if [ "$CONTAINER_RUNTIME" = "podman.exe" ]; then
 
   echo "✓ mysql-dev ya está corriendo en Podman Windows."
 
+  echo "── Esperando que MySQL esté listo..."
+
+  until podman.exe exec mysql-dev \
+    mysqladmin ping \
+    -h localhost \
+    -uappuser \
+    -papppass \
+    --silent \
+    2>/dev/null; do
+
+    printf "."
+    sleep 2
+  done
+
+  echo " listo."
+
 else
 
-  # Podman o Docker ejecutándose nativamente dentro de Linux/WSL.
+  # Fallback para Linux/WSL sin Podman Windows.
   echo "── Levantando MySQL con $CONTAINER_RUNTIME Compose..."
 
   "$CONTAINER_RUNTIME" compose \
     -f "$INFRA_DIR/compose.yaml" \
     up -d
 
+  echo "── Esperando que MySQL esté listo..."
+
+  until "$CONTAINER_RUNTIME" exec mysql-dev \
+    mysqladmin ping \
+    -h localhost \
+    -uappuser \
+    -papppass \
+    --silent \
+    2>/dev/null; do
+
+    printf "."
+    sleep 2
+  done
+
+  echo " listo."
+
 fi
 
 
-# ── Esperar a MySQL ──────────────────────────────────────────
-echo "── Esperando que MySQL esté listo..."
-
-until "$CONTAINER_RUNTIME" exec mysql-dev \
-  mysqladmin ping \
-  -h localhost \
-  -uappuser \
-  -papppass \
-  --silent \
-  2>/dev/null; do
-
-  printf "."
-  sleep 2
-
-done
-
-echo " listo."
 
 
 # ── 2. Vault ─────────────────────────────────────────────────

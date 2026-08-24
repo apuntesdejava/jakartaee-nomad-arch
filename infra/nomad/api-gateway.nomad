@@ -23,11 +23,12 @@ job "api-gateway" {
 
     # Tarea Docker con la imagen oficial de Fabio.
     task "fabio" {
-      driver = "docker"
+      driver = "podman"
       
       # Expone los puertos declarados en network hacia el contenedor.
       config {
-        image = "fabiolb/fabio:1.7.0"
+        image = "docker.io/fabiolb/fabio:1.7.3"
+        network_mode = "host"
         ports = ["lb", "ui"]
       }
 

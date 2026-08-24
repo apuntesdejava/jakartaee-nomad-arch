@@ -42,7 +42,7 @@ job "products-backend" {
 
     # Tarea Docker que ejecuta la aplicación products-hc-example.
     task "products" {
-      driver = "docker"
+      driver = "podman"
 
       # Autoriza a Nomad a solicitar secretos Vault para esta tarea con la policy
       # configurada por infra/scripts/setup-vault.sh.
@@ -64,7 +64,7 @@ EOH
 
       # Imagen Docker y mapeo de puertos que Nomad debe pasar al driver.
       config {
-        image = "apuntesdejava/products-hc-example-jvm:0.0.1"
+        image = "docker.io/apuntesdejava/products-hc-example-jvm:0.0.1"
         ports = ["http"]
       }
 
