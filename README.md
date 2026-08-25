@@ -1,12 +1,12 @@
 # Jakarta EE y Quarkus en Azure con HashiCorp Nomad
 
-Este repositorio contiene una demo de arquitectura para ejecutar microservicios Java desde el entorno local hasta Azure usando Docker, HashiCorp Nomad, Consul, Vault, Fabio, MySQL y Terraform.
+Este repositorio contiene una demo de arquitectura para ejecutar microservicios Java desde el entorno local hasta Azure usando **Podman**, HashiCorp Nomad, Consul, Vault, Fabio, MySQL y Terraform.
 
 Este material acompaña una charla para **JConf Dominicana, 16 de julio de 2026**, y queda publicado para que otras personas puedan descargar el proyecto, revisar la arquitectura y replicar la demo por partes.
 
 La idea central no es demostrar que Kubernetes o AKS no sirven. La pregunta es otra: **¿todos los proyectos pequeños o medianos necesitan empezar con AKS desde el día uno?**
 
-Para ciertos equipos, la plataforma también debe ser fácil de operar, explicar, repetir y pagar. Esta demo muestra una alternativa más pequeña y entendible para workloads Docker simples, manteniendo capacidades importantes:
+Para ciertos equipos, la plataforma también debe ser fácil de operar, explicar, repetir y pagar. Esta demo muestra una alternativa más pequeña y entendible para workloads de contenedores simples, manteniendo capacidades importantes:
 
 - Microservicios Java desplegables.
 - Service discovery.
@@ -17,26 +17,30 @@ Para ciertos equipos, la plataforma también debe ser fácil de operar, explicar
 - Infraestructura reproducible.
 - Pruebas de carga en vivo.
 
+---
+
 ## Qué demuestra
 
 El proyecto recorre una evolución incremental:
 
 ```mermaid
 flowchart LR
-    D[Dev local] --> C[Docker images]
-    C --> H[HashiCorp local]
+    D[Dev local] --> C[Container images]
+    C --> H[HashiCorp local con Podman]
     H --> A[Azure con Terraform]
     A --> O[Observabilidad + carga]
 ```
 
 La misma aplicación pasa por cuatro ambientes:
 
-| Ambiente        | Objetivo                                                                        |
-|-----------------|---------------------------------------------------------------------------------|
-| Localhost       | Mostrar que son aplicaciones Java normales, sin dependencia del orquestador.    |
-| Docker          | Convertir cada servicio en un workload portable.                                |
-| HashiCorp local | Ejecutar Nomad, Consul, Vault, Fabio y MySQL en un entorno de demo local.       |
-| Azure           | Crear infraestructura reproducible con Terraform y correr los workloads en VMs. |
+| Ambiente        | Objetivo                                                                                |
+|-----------------|-----------------------------------------------------------------------------------------|
+| Localhost       | Mostrar que son aplicaciones Java normales, sin dependencia del orquestador.            |
+| Containers      | Convertir cada servicio en un workload portable usando imágenes de contenedor.          |
+| HashiCorp local | Ejecutar Nomad, Consul, Vault, Fabio y MySQL en un entorno de demo local usando Podman. |
+| Azure           | Crear infraestructura reproducible con Terraform y correr los workloads en VMs.         |
+
+---
 
 ## Aplicaciones
 
@@ -55,38 +59,61 @@ flowchart LR
     SA --> DB
 ```
 
+---
+
 ## Plataforma
 
 | Componente | Rol                                             |
 |------------|-------------------------------------------------|
-| Nomad      | Scheduler de workloads Docker.                  |
+| Nomad      | Scheduler de workloads de contenedores.         |
 | Consul     | Service discovery y health checks.              |
 | Vault      | Entrega de secretos en tiempo de ejecución.     |
 | Fabio      | API Gateway dinámico basado en tags de Consul.  |
+| Podman     | Runtime de contenedores para la demo local.     |
 | MySQL      | Base de datos de la demo.                       |
 | Terraform  | Infraestructura cloud reproducible en Azure.    |
 | Bruno      | Colección HTTP para probar la API por ambiente. |
 | k6         | Carga y validación en vivo.                     |
 
+---
+
 ## Arquitectura local HashiCorp
+
+El entorno local utiliza dos instalaciones independientes de Podman:
+
+- **Podman en Windows**
+    - Construye y publica imágenes a través de Maven/Fabric8.
+    - Ejecuta MySQL mediante Podman Compose.
+
+- **Podman dentro de WSL2**
+    - Es utilizado por Nomad como runtime de workloads.
+    - Ejecuta Fabio, clients, products y sales.
+
+Nomad, Consul y Vault también se ejecutan dentro de WSL2.
 
 ```mermaid
 flowchart LR
     U[Bruno / curl / k6] --> F[Fabio :8000]
+
     F --> C[Consul]
     N[Nomad] --> C
     N --> V[Vault]
 
-    F --> CL[clients]
-    F --> PR[products]
-    F --> SA[sales]
+    N --> P[Podman WSL]
 
-    CL --> DB[(MySQL Docker)]
+    P --> CL[clients]
+    P --> PR[products]
+    P --> SA[sales]
+    P --> F
+
+    CL --> DB[(MySQL / Podman Windows)]
     PR --> DB
     SA --> DB
 ```
 
-Los jobs de Nomad registran servicios en Consul con tags `urlprefix`. Fabio lee esos tags y enruta sin configurar rutas a mano:
+Los jobs de Nomad registran servicios en Consul con tags `urlprefix`.
+
+Fabio lee esos tags y crea dinámicamente las rutas:
 
 | Ruta pública       | Servicio           |
 |--------------------|--------------------|
@@ -94,11 +121,15 @@ Los jobs de Nomad registran servicios en Consul con tags `urlprefix`. Fabio lee 
 | `/products/api`    | `products-backend` |
 | `/sales/resources` | `sales-backend`    |
 
-Los puertos internos son dinámicos. La URL pública no cambia cuando se escala.
+Los puertos internos de los backends son dinámicos. La URL pública no cambia cuando se escala.
+
+---
 
 ## Secrets con Vault
 
-Las credenciales no viven en el código ni en la imagen Docker. Nomad usa Workload Identity/JWT para obtener secretos desde Vault y los inyecta al workload en tiempo de ejecución.
+Las credenciales no viven en el código ni en las imágenes.
+
+Nomad usa Workload Identity/JWT para obtener secretos desde Vault y los inyecta al workload en tiempo de ejecución.
 
 ```mermaid
 sequenceDiagram
@@ -112,6 +143,8 @@ sequenceDiagram
     Nomad-->>Job: template secrets.env
     Job->>MySQL: conexión JDBC
 ```
+
+---
 
 ## Arquitectura en Azure
 
@@ -140,26 +173,63 @@ flowchart TB
     NAT --> DB
 ```
 
-Terraform crea la infraestructura base: VM de control, VM Scale Set de workers, Load Balancer, NAT Gateway y Azure Database for MySQL Flexible Server.
+Terraform crea la infraestructura base:
 
-## Requisitos
+- VM de control.
+- VM Scale Set de workers.
+- Load Balancer.
+- NAT Gateway.
+- Azure Database for MySQL Flexible Server.
+
+---
+
+# Requisitos
+
+Para ejecutar toda la demo local:
 
 - JDK 21.
 - Maven o los wrappers incluidos.
-- Docker Desktop.
-- WSL/Linux para los scripts HashiCorp locales. La demo fue probada con Docker Desktop en Windows y HashiCorp ejecutándose dentro de WSL.
-- Nomad, Consul y Vault para la demo local, instalables con `infra/scripts/install-hashicorp.sh`.
-- Terraform y Azure CLI instalados en Windows para el despliegue cloud.
+- Windows 10/11.
+- WSL2.
+- Podman en Windows.
+- Podman dentro de WSL2.
+- Nomad.
+- Consul.
+- Vault.
 - Bruno para usar la colección HTTP.
-- k6 para pruebas de carga.
+- k6 para las pruebas de carga.
+
+Para Azure:
+
+- Terraform.
+- Azure CLI.
+- Una suscripción de Azure.
+
+> [!IMPORTANT]
+> El entorno local usa **dos instalaciones independientes de Podman**:
+>
+> - Podman en Windows para construir/publicar imágenes y ejecutar MySQL.
+> - Podman dentro de WSL2 como runtime utilizado por Nomad.
+>
+> La instalación completa, incluyendo WSL2, Podman, el socket rootless, el driver Podman de Nomad y troubleshooting, está documentada en:
+>
+> **[Local Environment Setup](docs/local-environment.md)**
+
+---
 
 ## Descargar el proyecto
 
-Clona el repositorio y entra a la carpeta raíz:
+Clona el repositorio:
 
 ```bash
 git clone https://github.com/apuntesdejava/jakartaee-nomad-arch.git
 cd jakartaee-nomad-arch
+```
+
+Si quieres trabajar con la rama de desarrollo:
+
+```bash
+git switch devel
 ```
 
 Si solo quieres revisar la presentación:
@@ -170,40 +240,58 @@ npm install
 npm run dev
 ```
 
-## Ruta recomendada para replicar la demo
+---
 
-La demo se puede repetir por niveles. No necesitas ejecutar Azure para entender todo el proyecto.
+# Ruta recomendada para replicar la demo
 
-1. Revisa las aplicaciones Java en localhost.
-2. Construye las imágenes Docker.
-3. Levanta el stack HashiCorp local.
-4. Prueba endpoints por Fabio.
-5. Escala servicios con Nomad.
-6. Ejecuta k6 contra el gateway local o cloud.
-7. Opcionalmente, despliega la infraestructura en Azure con Terraform.
+La demo se puede repetir por niveles.
 
-La forma más práctica de aprender el proyecto es seguir esos pasos en orden. Cada ambiente agrega una pieza nueva sin cambiar la idea central de las aplicaciones.
+No necesitas desplegar Azure para entender el proyecto.
 
-## Ejecutar en localhost
+1. Ejecuta las aplicaciones Java directamente.
+2. Construye las imágenes de contenedor.
+3. Publica las imágenes en Docker Hub.
+4. Levanta el entorno HashiCorp local.
+5. Ejecuta los workloads con Nomad y Podman.
+6. Prueba los endpoints a través de Fabio.
+7. Escala servicios con Nomad.
+8. Ejecuta k6 contra el gateway local o cloud.
+9. Opcionalmente, despliega la infraestructura en Azure con Terraform.
+
+Para preparar el entorno local desde cero:
+
+**[Local Environment Setup](docs/local-environment.md)**
+
+---
+
+# Ejecutar en localhost
 
 Este modo sirve para desarrollar cada módulo de forma aislada.
+
+## Clients
 
 ```bash
 cd clients-hc-example
 ./mvnw quarkus:dev
 ```
 
+## Products
+
 ```bash
 cd products-hc-example
 ./mvnw quarkus:dev
 ```
+
+## Sales
 
 ```bash
 cd sales-hc-example
 ./mvnw package payara-micro:dev
 ```
 
-## Construir imágenes Docker
+---
+
+# Construir imágenes de contenedor
 
 Desde la raíz del repositorio:
 
@@ -211,7 +299,17 @@ Desde la raíz del repositorio:
 mvn clean install -Pprod
 ```
 
-El perfil `prod` construye/publica las imágenes:
+El proyecto utiliza el plugin Maven de Fabric8:
+
+```text
+io.fabric8:docker-maven-plugin
+```
+
+A pesar del nombre del plugin, el runtime utilizado por esta demo es **Podman**.
+
+En Windows, Fabric8 se comunica con Podman utilizando la API compatible con Docker que expone Podman Machine.
+
+Las imágenes generadas actualmente son:
 
 ```text
 docker.io/apuntesdejava/clients-hc-example-jvm:0.0.1
@@ -219,33 +317,130 @@ docker.io/apuntesdejava/products-hc-example-jvm:0.0.1
 docker.io/apuntesdejava/sales-hc-example:0.0.1
 ```
 
-Para publicar en Docker Hub debes estar autenticado previamente.
+> `docker.io` identifica Docker Hub como registry. No significa que Docker sea utilizado como runtime.
 
-Si vas a replicar la demo con tus propias imágenes, cambia el namespace/tag en los `pom.xml` y en los jobs de `infra/nomad`.
+Para publicar las imágenes debes tener configuradas las credenciales del registry.
 
-## Ejecutar HashiCorp local
+La configuración completa está documentada en:
 
-Primera vez:
+**[Local Environment Setup](docs/local-environment.md)**
+
+Si vas a replicar la demo con tus propias imágenes, cambia el namespace/tag correspondiente en los `pom.xml` y en los jobs de:
+
+```text
+infra/nomad
+```
+
+---
+
+# Ejecutar HashiCorp local
+
+El entorno local ejecuta:
+
+- Vault.
+- Consul.
+- Nomad.
+- Fabio.
+- Clients.
+- Products.
+- Sales.
+
+Nomad utiliza **Podman dentro de WSL2** para ejecutar los contenedores.
+
+MySQL se ejecuta usando **Podman en Windows**.
+
+## Primera instalación
+
+Consulta:
+
+**[Local Environment Setup](docs/local-environment.md)**
+
+También puedes instalar las herramientas HashiCorp mediante:
 
 ```bash
 ./infra/scripts/install-hashicorp.sh
 ```
 
-Arranque completo:
+---
+
+## Arranque normal
+
+Primero, desde PowerShell:
+
+```powershell
+podman machine start
+```
+
+Desde la raíz del proyecto:
+
+```powershell
+podman compose -f .\infra\compose.yaml up -d
+```
+
+Verifica MySQL:
+
+```powershell
+podman ps
+```
+
+Después, desde WSL:
 
 ```bash
 ./infra/scripts/start-local.sh
 ```
 
-Esto levanta:
+El script levanta y configura:
 
-- MySQL por Docker Compose.
-- Vault dev con token `root`.
-- Consul dev.
-- Nomad dev con integración Vault Workload Identity.
+- Vault en modo dev.
+- Consul.
+- Nomad.
+- Integración Vault Workload Identity.
+- Configuración Consul KV.
 - Jobs Nomad para Fabio, clients, products y sales.
 
-URLs locales:
+---
+
+## Verificar los jobs
+
+```bash
+nomad status
+```
+
+El resultado esperado es similar a:
+
+```text
+ID                Type     Priority  Status
+api-gateway       system   50        running
+clients-backend   service  50        running
+products-backend  service  50        running
+sales-backend     service  50        running
+```
+
+---
+
+## Verificar Consul
+
+```bash
+consul catalog services
+```
+
+El entorno completo debería registrar:
+
+```text
+clients-backend
+consul
+fabio
+nomad
+nomad-client
+products-backend
+sales-backend
+```
+
+---
+
+# URLs locales
+
+Desde la misma instancia WSL:
 
 | Servicio  | URL                     |
 |-----------|-------------------------|
@@ -255,31 +450,43 @@ URLs locales:
 | Vault UI  | `http://localhost:8200` |
 | Fabio UI  | `http://localhost:9998` |
 
-Si ejecutas todo en Linux nativo, o haces las pruebas desde la misma terminal WSL donde corre HashiCorp, normalmente puedes usar `localhost`:
+Si accedes desde Windows y `localhost` no funciona debido a la configuración de red de WSL, obtén la IP:
+
+```bash
+hostname -I | awk '{print $1}'
+```
+
+Ejemplo:
+
+```text
+172.26.124.97
+```
+
+Entonces puedes utilizar:
+
+```text
+http://172.26.124.97:8000
+http://172.26.124.97:4646
+http://172.26.124.97:8500
+http://172.26.124.97:8200
+http://172.26.124.97:9998
+```
+
+La IP de WSL puede cambiar después de reiniciar WSL.
+
+---
+
+# Pruebas rápidas
+
+Dentro de WSL:
 
 ```bash
 export HASHICORP_HOST=localhost
 ```
 
-Si ejecutas HashiCorp en WSL y abres el navegador desde Windows, puede que necesites usar la IP de WSL en vez de `localhost`. Obténla así dentro de WSL:
+O utiliza la IP correspondiente.
 
-```bash
-hostname -I
-```
-
-Toma la primera IP y úsala como host:
-
-```bash
-export HASHICORP_HOST=<ip_de_wsl>
-```
-
-En PowerShell puedes definirla así:
-
-```powershell
-$env:HASHICORP_HOST="<ip_de_wsl>"
-```
-
-Pruebas rápidas:
+Después:
 
 ```bash
 curl http://$HASHICORP_HOST:8000/products/api/q/health/ready
@@ -287,26 +494,112 @@ curl http://$HASHICORP_HOST:8000/clients/api/q/health/ready
 curl http://$HASHICORP_HOST:8000/sales/resources/sale
 ```
 
-Para ver que el gateway descubre servicios dinámicamente, abre Fabio UI y revisa las rutas publicadas desde Consul:
+Para revisar las rutas descubiertas dinámicamente por Fabio:
 
 ```text
-http://<ip_de_wsl_o_localhost>:9998
+http://<host>:9998
 ```
 
-Escalado local:
+---
+
+# Logs
+
+## Logs de HashiCorp
+
+```text
+/tmp/vault.log
+/tmp/consul.log
+/tmp/nomad.log
+```
+
+Ejemplo:
+
+```bash
+tail -f /tmp/nomad.log
+```
+
+---
+
+## Logs de aplicaciones Nomad
+
+Para ver las allocations:
+
+```bash
+nomad job allocs clients-backend
+```
+
+Después:
+
+```bash
+nomad alloc logs <ALLOC_ID> clients
+```
+
+Para seguir el log:
+
+```bash
+nomad alloc logs -f <ALLOC_ID> clients
+```
+
+También puedes obtener automáticamente la allocation activa:
+
+```bash
+nomad alloc logs -f $(
+  nomad job allocs -json clients-backend |
+  jq -r '.[] | select(.ClientStatus == "running") | .ID' |
+  head -1
+) clients
+```
+
+Para Fabio:
+
+```bash
+nomad alloc logs -f $(
+  nomad job allocs -json api-gateway |
+  jq -r '.[] | select(.ClientStatus == "running") | .ID' |
+  head -1
+) fabio
+```
+
+---
+
+# Escalado local
+
+Puedes modificar la cantidad de instancias directamente con Nomad:
 
 ```bash
 nomad job scale products-backend api 3
 nomad job scale clients-backend api 3
 ```
 
-## Desplegar en Azure
+Verifica:
 
-Este paso es opcional para quienes descarguen el proyecto. Requiere una suscripción de Azure y genera costos mientras los recursos estén vivos.
+```bash
+nomad job status products-backend
+```
 
-En esta demo, **Terraform debe ejecutarse desde Windows, no desde WSL**. El despliegue cloud depende de conexiones de red que, en este entorno, no se resuelven correctamente desde WSL.
+y:
 
-La configuración Terraform está en `infra/terraform`.
+```bash
+consul catalog services
+```
+
+Fabio actualiza sus rutas automáticamente mediante Consul.
+
+---
+
+# Desplegar en Azure
+
+Este paso es opcional.
+
+Requiere una suscripción de Azure y genera costos mientras los recursos estén activos.
+
+En esta demo, **Terraform debe ejecutarse desde Windows, no desde WSL**.
+
+La configuración Terraform está en:
+
+```text
+infra/terraform
+```
 
 Desde PowerShell:
 
@@ -327,25 +620,51 @@ mysql_host
 ssh_control
 ```
 
-Después de crear infraestructura, carga schema y datos:
+---
+
+## Cargar datos en Azure
+
+Después de crear la infraestructura:
 
 ```powershell
 cd ../..
 wsl bash ./infra/scripts/seed-azure-db.sh --reset
 ```
 
-El script lee outputs de Terraform, entra por SSH a la VM de control y ejecuta un contenedor temporal de MySQL para cargar `infra/mysql/init/init.sql`. Desde Windows se invoca con `wsl bash` porque el script es Bash, pero los comandos de Terraform se mantienen en Windows.
+El script:
 
-Verificación desde la VM de control:
+1. Lee los outputs de Terraform.
+2. Entra por SSH a la VM de control.
+3. Ejecuta un cliente MySQL temporal.
+4. Carga:
+
+```text
+infra/mysql/init/init.sql
+```
+
+Terraform permanece ejecutándose desde Windows.
+
+---
+
+## Verificar el entorno Azure
+
+Conéctate a la VM de control:
 
 ```powershell
 ssh azureuser@<control_public_ip>
+```
+
+Después:
+
+```bash
 nomad node status
 nomad job status
 consul members
 ```
 
-Pruebas por gateway:
+---
+
+## Probar el gateway Azure
 
 ```bash
 curl http://<gateway_public_ip>:8000/products/api/q/health/ready
@@ -353,7 +672,11 @@ curl http://<gateway_public_ip>:8000/clients/api/q/health/ready
 curl http://<gateway_public_ip>:8000/sales/resources/sale
 ```
 
-Cuando termines una práctica en Azure, destruye los recursos si no los necesitas:
+---
+
+## Destruir la infraestructura
+
+Cuando termines:
 
 ```powershell
 cd infra/terraform
@@ -362,7 +685,9 @@ terraform destroy
 
 Revisa antes cualquier recurso que quieras conservar, especialmente MySQL.
 
-## Bruno
+---
+
+# Bruno
 
 La colección está en:
 
@@ -379,6 +704,9 @@ DOCKER
 AZURE
 ```
 
+> El ambiente `DOCKER` se conserva actualmente como parte de la colección existente.
+> Será revisado junto con el resto de referencias heredadas durante la limpieza del proyecto.
+
 Para actualizar IPs:
 
 ```bash
@@ -387,7 +715,9 @@ javac UpdateIps.java
 java UpdateIps env=AZURE ip=<gateway_public_ip>
 ```
 
-## Carga con k6
+---
+
+# Carga con k6
 
 Ejemplo para la demo en vivo:
 
@@ -400,132 +730,102 @@ K6_WEB_DASHBOARD_EXPORT=load-tests/k6/report-azure.html \
 k6 run load-tests/k6/live-demo.js
 ```
 
-Dashboard local de k6:
+Dashboard local:
 
 ```text
 http://127.0.0.1:5665
 ```
 
-También puedes observar el estado de la plataforma mientras corre la carga:
+También puedes observar el estado de la plataforma durante la prueba:
 
 ```bash
 bash ./infra/scripts/watch-azure-live.sh
 ```
 
-Muestra nodos Nomad, jobs, servicios Consul, checks, probes del gateway y estado de Fabio.
+El script muestra:
 
-## Escalado manual
+- nodos Nomad;
+- jobs;
+- servicios Consul;
+- health checks;
+- probes del gateway;
+- estado de Fabio.
+
+---
+
+# Escalado manual en Azure
+
+Conéctate:
 
 ```bash
 ssh azureuser@<control_public_ip>
+```
 
+Escala los servicios:
+
+```bash
 nomad job scale products-backend api 3
 nomad job scale clients-backend api 3
 ```
 
-Verificación:
+Verifica:
 
 ```bash
 nomad job status products-backend
 consul catalog services
 ```
 
-Fabio balancea automáticamente porque lee Consul. Más instancias, misma URL pública.
- 
+Fabio balancea automáticamente las nuevas instancias porque obtiene la topología desde Consul.
 
-## AKS vs Nomad: lectura honesta
+La URL pública permanece igual.
 
-Esta demo no propone reemplazar AKS siempre. Propone evitar pagar complejidad antes de necesitarla.
+---
 
-| Tema          | AKS                                                        | Nomad + Consul + Vault                                    |
-|---------------|------------------------------------------------------------|-----------------------------------------------------------|
-| Control plane | Gestionado por Azure.                                      | VM propia.                                                |
-| Orquestación  | Kubernetes.                                                | Nomad.                                                    |
-| Discovery     | Services/CoreDNS.                                          | Consul.                                                   |
-| Secrets       | Kubernetes Secrets, Key Vault, CSI, etc.                   | Vault.                                                    |
-| Gateway       | Ingress, App Gateway o similar.                            | Fabio + Azure Load Balancer.                              |
-| Operación     | Más ecosistema, más superficie.                            | Menos piezas, menor curva.                                |
-| Mejor para    | Plataformas grandes o equipos que ya necesitan Kubernetes. | Proyectos pequeños/medianos con workloads Docker simples. |
+# AKS vs Nomad: lectura honesta
+
+Esta demo no propone reemplazar AKS siempre.
+
+Propone evaluar si vale la pena adoptar toda la complejidad de Kubernetes desde el inicio de un proyecto.
+
+| Tema          | AKS                                                        | Nomad + Consul + Vault                                             |
+|---------------|------------------------------------------------------------|--------------------------------------------------------------------|
+| Control plane | Gestionado por Azure.                                      | VM propia.                                                         |
+| Orquestación  | Kubernetes.                                                | Nomad.                                                             |
+| Discovery     | Services/CoreDNS.                                          | Consul.                                                            |
+| Secrets       | Kubernetes Secrets, Key Vault, CSI, etc.                   | Vault.                                                             |
+| Gateway       | Ingress, App Gateway o similar.                            | Fabio + Azure Load Balancer.                                       |
+| Operación     | Más ecosistema y mayor superficie operativa.               | Menos piezas y una curva menor.                                    |
+| Mejor para    | Plataformas grandes o equipos que ya necesitan Kubernetes. | Proyectos pequeños/medianos con workloads simples de contenedores. |
 
 Para costos:
 
 - Contra AKS Free, AKS suele ganar en costo puro porque el control plane no se cobra.
 - Contra AKS Standard, Nomad con una VM de control puede ser competitivo para demos o proyectos pequeños.
 - Nomad HA requiere más VMs de control y cambia la comparación.
-- MySQL, NAT Gateway, Load Balancer y workers existen en ambos escenarios; la diferencia está en la plataforma de orquestación alrededor.
+- MySQL, NAT Gateway, Load Balancer y workers existen en ambos escenarios.
+- La diferencia está principalmente en la plataforma de orquestación alrededor de los workloads.
 
-## Podman on Windows
+---
 
-This project uses the Fabric8 `docker-maven-plugin` to build and push container images during:
+# Más documentación
 
-```powershell
-mvn clean install -Pprod
-```
+Para configurar el entorno local completo:
 
-When using Podman instead of Docker Desktop on Windows, Fabric8 must connect to Podman's Docker-compatible API.
+**[Local Environment Setup](docs/local-environment.md)**
 
-Start the Podman machine first:
+Ahí se documentan:
 
-```powershell
-podman machine start
-```
-
-Then configure `DOCKER_HOST` in the same PowerShell session:
-
-```powershell
-$Env:DOCKER_HOST = "npipe:////./pipe/podman-machine-default"
-```
-
-Verify it with:
-
-```powershell
-$Env:DOCKER_HOST
-```
-
-Expected value:
-
-```text
-npipe:////./pipe/podman-machine-default
-```
-
-After that, the normal Maven build can be executed:
-
-```powershell
-mvn clean install -Pprod
-```
-
-> **Note:** `DOCKER_HOST` is set only for the current PowerShell session. If a new terminal is opened, set it again before running Maven.
-
-Podman itself may report that Docker-compatible API forwarding is available through:
-
-```text
-npipe:////./pipe/docker_engine
-```
-
-However, on some Windows environments Fabric8 may fail with:
-
-```text
-\\.\pipe\docker_engine
-Todas las instancias de canalización están en uso
-```
-
-Using the Podman-specific named pipe through `DOCKER_HOST` avoids that issue.
-
-
-## Recursos
-
-- Blog: `apuntesdejava.com`
-- YouTube: `youtube.com/@apuntesdejava`
-- X: `x.com/apuntesdejava`
-- GitHub: `github.com/apuntesdejava`
-- TikTok: `@apuntesdejava`
-- Instagram: `@apuntesdejava`
-
-## Referencias
-
-- Nomad: https://developer.hashicorp.com/nomad
-- Consul: https://developer.hashicorp.com/consul
-- Vault: https://developer.hashicorp.com/vault
-- k6 Web Dashboard: https://grafana.com/docs/k6/latest/results-output/web-dashboard/
-- AKS pricing tiers: https://learn.microsoft.com/azure/aks/free-standard-pricing-tiers
-- Azure Retail Prices API: https://learn.microsoft.com/rest/api/cost-management/retail-prices
+- instalación de WSL2;
+- instalación de Podman en Windows;
+- configuración de Podman Machine;
+- configuración de `DOCKER_HOST`;
+- autenticación de Fabric8 contra Docker Hub;
+- instalación de Podman dentro de WSL;
+- Podman rootless;
+- Podman socket;
+- `nomad-driver-podman`;
+- configuración del driver Nomad;
+- MySQL con Podman Compose;
+- troubleshooting;
+- comandos de diagnóstico;
+- procedimiento de arranque completo.
