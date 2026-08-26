@@ -21,7 +21,7 @@ job "api-gateway" {
       }
     }
 
-    # Tarea Docker con la imagen oficial de Fabio.
+    # Tarea de contenedor con la imagen oficial de Fabio.
     task "fabio" {
       driver = "podman"
       

@@ -40,7 +40,7 @@ job "sales-backend" {
       }
     }
 
-    # Tarea Docker que ejecuta la imagen Payara Micro con el WAR de sales.
+    # Tarea de contenedor que ejecuta la imagen Payara Micro con el WAR de sales.
     task "sales" {
       driver = "podman"
 

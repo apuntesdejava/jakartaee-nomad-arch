@@ -1,6 +1,6 @@
 # Job de Nomad para el microservicio de productos.
 # Mantiene el backend disponible, lo registra en Consul y le inyecta secretos de
-# base de datos desde Vault antes de ejecutar la imagen Docker.
+# base de datos desde Vault antes de ejecutar la imagen de contenedor.
 job "products-backend" {
   # En el laboratorio local, Nomad corre con un datacenter lógico llamado "dc1".
   # "service" significa que Nomad debe conservar el workload vivo.
@@ -40,7 +40,7 @@ job "products-backend" {
       }
     }
 
-    # Tarea Docker que ejecuta la aplicación products-hc-example.
+    # Tarea de contenedor que ejecuta la aplicación products-hc-example.
     task "products" {
       driver = "podman"
 
@@ -62,7 +62,7 @@ EOH
         env         = true
       }
 
-      # Imagen Docker y mapeo de puertos que Nomad debe pasar al driver.
+      # Imagen de contenedor y mapeo de puertos que Nomad debe pasar al driver Podman.
       config {
         image = "docker.io/apuntesdejava/products-hc-example-jvm:0.0.1"
         ports = ["http"]

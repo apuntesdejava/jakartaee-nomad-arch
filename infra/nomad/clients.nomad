@@ -9,7 +9,7 @@ job "clients-backend" {
   type        = "service"
 
   # Un grupo agrupa tareas que se ejecutan juntas en el mismo nodo. Aquí solo hay
-  # una tarea Docker, pero el grupo también define red, puertos y registro Consul.
+  # una tarea de contenedor, pero el grupo también define red, puertos y registro Consul.
   group "api" {
     # Red del grupo. Con mode = "host", el contenedor usa un puerto del host WSL.
     # Nomad asigna dinámicamente el puerto externo y lo expone como NOMAD_PORT_http.
@@ -43,7 +43,7 @@ job "clients-backend" {
       }
     }
 
-    # Tarea principal del grupo. Nomad usara el driver Docker para descargar y
+    # Tarea principal del grupo. Nomad usara el driver Podman para descargar y
     # ejecutar la imagen JVM de Quarkus.
     task "clients" {
       driver = "podman"
@@ -67,7 +67,7 @@ EOH
         env         = true
       }
 
-      # Configuración específica del driver Docker: imagen a ejecutar y puertos
+      # Configuración específica del driver Podman: imagen a ejecutar y puertos
       # definidos en el bloque network que deben exponerse al contenedor.
       config {
         image = "docker.io/apuntesdejava/clients-hc-example-jvm:0.0.1"
