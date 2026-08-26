@@ -89,25 +89,27 @@ Prefer:
 ```bash
 podman
 ```
+
 or, when intentionally invoking Windows Podman from WSL:
+
 ```bash
 podman.exe
 ```
 
-### Script expectations
+## Script expectations
 
 Scripts under `infra/scripts` should:
 
-* fail clearly when required tools are missing;
-* print actionable error messages;
-* avoid silently falling back to Docker;
-* preserve current working Podman behavior;
-* remain usable from WSL;
-* avoid hardcoded machine-specific paths where possible.
+- fail clearly when required tools are missing;
+- print actionable error messages;
+- avoid silently falling back to Docker;
+- preserve current working Podman behavior;
+- remain usable from WSL;
+- avoid hardcoded machine-specific paths where possible.
 
 Do not change unrelated behavior while performing cleanup tasks.
 
-### Nomad
+## Nomad
 
 Local Nomad workloads use:
 
@@ -117,13 +119,13 @@ driver = "podman"
 
 Container image names should be fully qualified, for example:
 
-```
+```text
 docker.io/apuntesdejava/products-hc-example-jvm:0.0.1
 ```
 
 Fabio requires:
 
-```
+```hcl
 network_mode = "host"
 ```
 
@@ -131,24 +133,35 @@ in the local Podman setup so it can reach Consul running in WSL.
 
 Do not revert these settings.
 
-### Validation
+## Validation
 
 After modifying shell scripts:
 
-```
+```bash
 bash -n <script>
 ```
 
 For changes involving the local environment, inspect at minimum:
-```
+
+```bash
 nomad status
 consul catalog services
 ```
+
 when the environment is available.
 
 Do not claim runtime validation was performed if the environment is unavailable.
 
-Change discipline
+## Documentation consistency
+
+When a change modifies the supported local architecture, installation steps, runtime requirements or startup procedure, verify whether these documents also need to be updated:
+
+- `README.md`
+- `docs/local-environment.md`
+
+Do not duplicate large setup instructions unnecessarily. Prefer keeping detailed installation and troubleshooting information in `docs/local-environment.md`.
+
+## Change discipline
 
 For each requested task:
 
