@@ -344,7 +344,6 @@ resource "azurerm_linux_virtual_machine" "control" {
   }
 
   custom_data = base64encode(templatefile("${path.module}/cloud-init-control.yaml", {
-    admin_username    = var.admin_username
     consul_version    = var.consul_version
     nomad_version     = var.nomad_version
     vault_version     = var.vault_version
@@ -404,10 +403,10 @@ resource "azurerm_linux_virtual_machine_scale_set" "workers" {
   }
 
   custom_data = base64encode(templatefile("${path.module}/cloud-init-worker.yaml", {
-    admin_username     = var.admin_username
-    consul_version     = var.consul_version
-    nomad_version      = var.nomad_version
-    control_private_ip = azurerm_network_interface.control.private_ip_address
+    consul_version              = var.consul_version
+    nomad_version               = var.nomad_version
+    nomad_podman_driver_version = var.nomad_podman_driver_version
+    control_private_ip          = azurerm_network_interface.control.private_ip_address
   }))
 
   depends_on = [

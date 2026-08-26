@@ -81,6 +81,12 @@ variable "nomad_version" {
   default     = "2.0.0"
 }
 
+variable "nomad_podman_driver_version" {
+  description = "Nomad Podman task driver version to install on Azure worker nodes"
+  type        = string
+  default     = "0.6.5"
+}
+
 variable "consul_version" {
   description = "Consul version to install on Azure nodes"
   type        = string

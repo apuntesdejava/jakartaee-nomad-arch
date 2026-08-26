@@ -7,11 +7,7 @@ runcmd:
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update
-    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip jq docker.io
-
-    systemctl enable docker
-    systemctl start docker
-    usermod -aG docker ${admin_username}
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip jq
 
     install_hashicorp() {
       local name="$1"

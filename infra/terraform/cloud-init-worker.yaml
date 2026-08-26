@@ -7,11 +7,19 @@ runcmd:
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update
-    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip jq docker.io
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip jq podman
 
-    systemctl enable docker
-    systemctl start docker
-    usermod -aG docker ${admin_username}
+    curl -fsSL https://apt.releases.hashicorp.com/gpg \
+      | gpg --dearmor --yes -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+      > /etc/apt/sources.list.d/hashicorp.list
+
+    apt-get update
+    apt-get install -y "nomad-driver-podman=${nomad_podman_driver_version}-1"
+
+    test -x /opt/nomad/plugins/nomad-driver-podman
+    systemctl enable --now podman.socket
+    test -S /run/podman/podman.sock
 
     install_hashicorp() {
       local name="$1"
@@ -49,6 +57,7 @@ runcmd:
     cat > /etc/nomad.d/nomad.hcl <<EOF
     datacenter = "dc1"
     data_dir   = "/opt/nomad"
+    plugin_dir = "/opt/nomad/plugins"
     bind_addr  = "0.0.0.0"
 
     advertise {
@@ -75,13 +84,20 @@ runcmd:
       address = "http://${control_private_ip}:8200"
       jwt_auth_backend_path = "jwt-nomad"
     }
+
+    plugin "nomad-driver-podman" {
+      config {
+        socket_path = "unix:///run/podman/podman.sock"
+      }
+    }
     EOF
 
     cat > /etc/systemd/system/nomad.service <<EOF
     [Unit]
     Description=Nomad Client
-    After=network-online.target consul.service docker.service
+    After=network-online.target consul.service podman.socket
     Wants=network-online.target
+    Requires=podman.socket
 
     [Service]
     ExecStart=/usr/local/bin/nomad agent -config=/etc/nomad.d
@@ -93,5 +109,5 @@ runcmd:
     EOF
 
     systemctl daemon-reload
-    systemctl enable consul nomad
-    systemctl start consul nomad
+    systemctl enable consul nomad podman.socket
+    systemctl start podman.socket consul nomad
