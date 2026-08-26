@@ -42,64 +42,35 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq curl unzip jq
 
 
-# ── Runtime / Compose ────────────────────────────────────────
-#
-# La demo puede usar:
-#
-#   1. Podman instalado directamente en Linux/WSL.
-#   2. Podman instalado en Windows, invocado desde WSL como
-#      podman.exe.
-#   3. Docker como fallback.
-#
-# En el caso de Podman Windows, `podman.exe compose` puede
-# delegar internamente en un proveedor Compose externo.
-#
+# ── Runtimes Podman ──────────────────────────────────────────
 echo "── Verificando runtime de contenedores..."
 
-CONTAINER_RUNTIME=""
-
-if command -v podman &>/dev/null; then
-
-  CONTAINER_RUNTIME="podman"
-
-  if podman compose version &>/dev/null 2>&1; then
-    info "Podman + Compose disponibles."
-  else
-    warn "Podman está instalado, pero 'podman compose' no está disponible."
-  fi
-
-elif command -v podman.exe &>/dev/null; then
-
-  CONTAINER_RUNTIME="podman.exe"
-
-  if podman.exe compose version &>/dev/null 2>&1; then
-    info "Podman Windows + Compose disponibles desde WSL."
-  else
-    warn "podman.exe está disponible, pero 'podman.exe compose' no funciona."
-  fi
-
-elif command -v docker &>/dev/null; then
-
-  CONTAINER_RUNTIME="docker"
-
-  if docker compose version &>/dev/null 2>&1; then
-    info "Docker + Compose disponibles."
-  else
-    warn "Docker está instalado, pero 'docker compose' no está disponible."
-
-    warn "Intentando instalar docker-compose-plugin..."
-
-    sudo apt-get install -y -qq docker-compose-plugin || \
-      warn "No se pudo instalar docker-compose-plugin."
-  fi
-
-else
-
-  warn "No se encontró Podman ni Docker."
-  warn "Puedes continuar instalando HashiCorp, pero start-local.sh necesitará un runtime de contenedores."
-
+if ! command -v podman &>/dev/null; then
+  warn "Podman nativo de Linux/WSL no está instalado."
+  warn "Instálalo con:"
+  echo "  sudo apt update"
+  echo "  sudo apt install -y podman"
+  exit 1
 fi
 
+if ! podman info &>/dev/null; then
+  warn "Podman nativo de Linux/WSL está instalado, pero 'podman info' no responde."
+  warn "Verifica la configuración de Podman antes de continuar."
+  exit 1
+fi
+
+info "Podman nativo de Linux/WSL disponible."
+
+if command -v podman.exe &>/dev/null; then
+  if podman.exe info &>/dev/null; then
+    info "Podman Windows disponible y respondiendo desde WSL."
+  else
+    warn "Podman Windows está instalado, pero no responde."
+    warn "Ejecuta en PowerShell: podman machine start"
+  fi
+else
+  warn "Podman Windows (podman.exe) no se detectó desde WSL."
+fi
 
 # ── Función de instalación genérica ─────────────────────────
 install_hc_tool() {
@@ -250,24 +221,9 @@ terraform version | head -1
 echo ""
 
 
-# ── Mostrar runtime detectado ────────────────────────────────
-if [ "$CONTAINER_RUNTIME" = "podman" ]; then
-
-  info "Runtime detectado: Podman"
-
-elif [ "$CONTAINER_RUNTIME" = "podman.exe" ]; then
-
-  info "Runtime detectado: Podman Windows vía WSL"
-
-elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
-
-  info "Runtime detectado: Docker"
-
-else
-
-  warn "No se detectó runtime de contenedores."
-
-fi
+# ── Resumen de runtimes ──────────────────────────────────────
+info "Runtime Nomad requerido: Podman Linux/WSL"
+info "Runtime MySQL esperado: Podman Windows"
 
 
 echo ""
