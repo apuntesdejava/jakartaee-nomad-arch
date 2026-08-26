@@ -8,3 +8,4 @@ variables:
     value: http://172.26.124.97:8000/
   - name: saleBaseUrl
     value: http://172.26.124.97:8000/sales/resources
+

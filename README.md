@@ -700,19 +700,23 @@ Ambientes disponibles:
 ```text
 LOCAL
 LOCAL_HC
-DOCKER
 AZURE
 ```
 
-> El ambiente `DOCKER` se conserva actualmente como parte de la colección existente.
-> Será revisado junto con el resto de referencias heredadas durante la limpieza del proyecto.
+`LOCAL` apunta a los servicios ejecutados directamente en sus puertos individuales.
+`LOCAL_HC` apunta al gateway Fabio del entorno HashiCorp local en el puerto `8000`.
 
-Para actualizar IPs:
+Para actualizar automáticamente `LOCAL_HC` con la IP actual de WSL:
+
+```bash
+bash requests/bruno/update-local-ip.sh
+```
+
+Para actualizar manualmente cualquier ambiente con la utilidad genérica:
 
 ```bash
 cd requests/bruno
-javac UpdateIps.java
-java UpdateIps env=AZURE ip=<gateway_public_ip>
+java UpdateIps.java env=AZURE ip=<gateway_public_ip>
 ```
 
 ---
