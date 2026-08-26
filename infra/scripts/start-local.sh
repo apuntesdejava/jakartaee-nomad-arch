@@ -218,6 +218,14 @@ nomad job run -detach \
   "$INFRA_DIR/nomad/api-gateway.nomad"
 
 
+# ── Actualizar ambiente Bruno ────────────────────────────────
+echo "── Actualizando ambiente Bruno LOCAL_HC..."
+
+if ! bash "$PROJECT_ROOT/requests/bruno/update-local-ip.sh"; then
+  echo "! El stack está ejecutándose, pero Bruno LOCAL_HC no pudo actualizarse automáticamente."
+fi
+
+
 # ── Listo ────────────────────────────────────────────────────
 echo ""
 echo "✓ Stack listo (modo local con Vault)"
