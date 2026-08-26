@@ -6,26 +6,40 @@ INFRA_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_ROOT="$(cd "$INFRA_DIR/.." && pwd)"
 
 
-# ── Detectar runtime de contenedores ─────────────────────────
-#
-# Orden de preferencia:
-#
-#   1. Podman nativo Linux/WSL
-#   2. Podman instalado en Windows, accesible desde WSL
-#   3. Docker
-#
-if command -v podman &>/dev/null; then
-  CONTAINER_RUNTIME="podman"
-elif command -v podman.exe &>/dev/null; then
-  CONTAINER_RUNTIME="podman.exe"
-elif command -v docker &>/dev/null; then
-  CONTAINER_RUNTIME="docker"
-else
-  echo "✗ No se encontró Podman ni Docker."
+# ── Verificar runtimes Podman ────────────────────────────────
+if ! command -v podman &>/dev/null; then
+  echo "✗ Podman nativo de Linux/WSL no está instalado."
+  echo "  Instálalo con:"
+  echo ""
+  echo "    sudo apt update"
+  echo "    sudo apt install -y podman"
+  echo ""
   exit 1
 fi
 
-echo "── Runtime de contenedores: $CONTAINER_RUNTIME"
+if ! podman info &>/dev/null; then
+  echo "✗ Podman nativo de Linux/WSL está instalado, pero 'podman info' no responde."
+  echo "  Verifica la configuración de Podman antes de continuar."
+  exit 1
+fi
+
+if ! command -v podman.exe &>/dev/null; then
+  echo "✗ Podman Windows (podman.exe) no está disponible desde WSL."
+  echo "  Instala Podman en Windows y vuelve a ejecutar este script."
+  exit 1
+fi
+
+if ! podman.exe info &>/dev/null; then
+  echo "✗ Podman Windows está instalado, pero no responde."
+  echo ""
+  echo "  Desde PowerShell ejecuta:"
+  echo ""
+  echo "    podman machine start"
+  echo ""
+  exit 1
+fi
+
+echo "── Podman Linux/WSL y Podman Windows disponibles."
 
 
 # ── Verificaciones previas ───────────────────────────────────
@@ -41,26 +55,10 @@ for tool in consul nomad vault; do
 done
 
 
-# ── Verificar runtime ────────────────────────────────────────
-if ! "$CONTAINER_RUNTIME" info &>/dev/null; then
-  echo "✗ $CONTAINER_RUNTIME no está disponible."
-
-  if [ "$CONTAINER_RUNTIME" = "podman.exe" ]; then
-    echo ""
-    echo "  Desde PowerShell verifica que Podman Machine esté iniciado:"
-    echo ""
-    echo "    podman machine start"
-    echo ""
-  fi
-
-  exit 1
-fi
-
-
 echo "── Limpiando procesos anteriores en segundo plano..."
 
 pkill -f "consul agent" || true
-pkill -f "nomad agent" || true
+sudo pkill -f "nomad agent" || true
 pkill -f "vault server" || true
 
 sleep 2
@@ -69,75 +67,44 @@ sleep 2
 # ── 1. MySQL ─────────────────────────────────────────────────
 echo "── 1. Preparando MySQL..."
 
-# En WSL, si tenemos acceso a Podman Windows, MySQL se administra
-# desde PowerShell para evitar problemas de rutas con Compose.
-if command -v podman.exe &>/dev/null; then
+# MySQL se administra desde PowerShell con Podman Windows.
+echo "── Verificando MySQL en Podman Windows..."
 
-  echo "── Verificando MySQL en Podman Windows..."
+if ! podman.exe ps \
+    --format "{{.Names}}" \
+    | tr -d '\r' \
+    | grep -q "^mysql-dev$"; then
 
-  if ! podman.exe ps \
-      --format "{{.Names}}" \
-      | tr -d '\r' \
-      | grep -q "^mysql-dev$"; then
+  echo ""
+  echo "✗ El contenedor 'mysql-dev' no está corriendo."
+  echo ""
+  echo "  Desde PowerShell, en la raíz del proyecto, ejecuta:"
+  echo ""
+  echo "    podman compose -f .\\infra\\compose.yaml up -d"
+  echo ""
+  echo "  Después vuelve a ejecutar este script desde WSL."
+  echo ""
 
-    echo ""
-    echo "✗ El contenedor 'mysql-dev' no está corriendo."
-    echo ""
-    echo "  Desde PowerShell, en la raíz del proyecto, ejecuta:"
-    echo ""
-    echo "    podman compose -f .\\infra\\compose.yaml up -d"
-    echo ""
-    echo "  Después vuelve a ejecutar este script desde WSL."
-    echo ""
-
-    exit 1
-  fi
-
-  echo "✓ mysql-dev ya está corriendo en Podman Windows."
-
-  echo "── Esperando que MySQL esté listo..."
-
-  until podman.exe exec mysql-dev \
-    mysqladmin ping \
-    -h localhost \
-    -uappuser \
-    -papppass \
-    --silent \
-    2>/dev/null; do
-
-    printf "."
-    sleep 2
-  done
-
-  echo " listo."
-
-else
-
-  # Fallback para Linux/WSL sin Podman Windows.
-  echo "── Levantando MySQL con $CONTAINER_RUNTIME Compose..."
-
-  "$CONTAINER_RUNTIME" compose \
-    -f "$INFRA_DIR/compose.yaml" \
-    up -d
-
-  echo "── Esperando que MySQL esté listo..."
-
-  until "$CONTAINER_RUNTIME" exec mysql-dev \
-    mysqladmin ping \
-    -h localhost \
-    -uappuser \
-    -papppass \
-    --silent \
-    2>/dev/null; do
-
-    printf "."
-    sleep 2
-  done
-
-  echo " listo."
-
+  exit 1
 fi
 
+echo "✓ mysql-dev ya está corriendo en Podman Windows."
+
+echo "── Esperando que MySQL esté listo..."
+
+until podman.exe exec mysql-dev \
+  mysqladmin ping \
+  -h localhost \
+  -uappuser \
+  -papppass \
+  --silent \
+  2>/dev/null; do
+
+  printf "."
+  sleep 2
+done
+
+echo " listo."
 
 
 
@@ -256,7 +223,8 @@ echo ""
 echo "✓ Stack listo (modo local con Vault)"
 echo ""
 
-echo "  Runtime:   $CONTAINER_RUNTIME"
+echo "  Nomad runtime: Podman Linux/WSL"
+echo "  MySQL runtime: Podman Windows"
 echo ""
 
 echo "  clients:   http://localhost:8081/clients/api"
