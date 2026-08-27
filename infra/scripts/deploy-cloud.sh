@@ -5,24 +5,30 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INFRA_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_ROOT="$(cd "$INFRA_DIR/.." && pwd)"
 
-CLOUD_IP=$1
+CONTROL_PUBLIC_IP="${1:-}"
+GATEWAY_PUBLIC_IP="${2:-}"
 
-if [ -z "$CLOUD_IP" ]; then
-    echo "── Intentando obtener IP de la nube desde Terraform local..."
-    cd "$INFRA_DIR/terraform"
-    CLOUD_IP=$(terraform output -raw public_ip 2>/dev/null || echo "")
-fi
-
-if [ -z "$CLOUD_IP" ] || [ "$CLOUD_IP" == "No outputs found" ]; then
-    echo "✗ Error: No se pudo detectar la IP automáticamente."
-    echo "Uso: ./infra/scripts/deploy-cloud.sh <IP_PUBLICA_DE_AZURE>"
+if [ -z "$CONTROL_PUBLIC_IP" ] || [ -z "$GATEWAY_PUBLIC_IP" ]; then
+    echo "✗ Faltan las IP públicas del control plane y del gateway de Azure."
+    echo ""
+    echo "  Primero ejecuta Terraform desde Windows/PowerShell."
+    echo "  Desde infra/terraform, obtén las IP con:"
+    echo ""
+    echo "    terraform output -raw control_public_ip"
+    echo "    terraform output -raw gateway_public_ip"
+    echo ""
+    echo "  Después, desde WSL, ejecuta:"
+    echo ""
+    echo "    ./infra/scripts/deploy-cloud.sh <CONTROL_PUBLIC_IP> <GATEWAY_PUBLIC_IP>"
+    echo ""
     exit 1
 fi
 
-echo "── IP de la nube: $CLOUD_IP"
+echo "── IP pública del control plane: $CONTROL_PUBLIC_IP"
+echo "── IP pública del gateway: $GATEWAY_PUBLIC_IP"
 
-export NOMAD_ADDR="http://$CLOUD_IP:4646"
-export CONSUL_HTTP_ADDR="http://$CLOUD_IP:8500"
+export NOMAD_ADDR="http://$CONTROL_PUBLIC_IP:4646"
+export CONSUL_HTTP_ADDR="http://$CONTROL_PUBLIC_IP:8500"
 
 echo "── 1. Esperando que Nomad en la nube esté listo..."
 # Cambiamos la espera a Nomad (puerto 4646) que ya vimos que responde
@@ -48,11 +54,11 @@ nomad job run -detach "$INFRA_DIR/nomad/sales.nomad"
 
 echo ""
 echo "✓ ¡Despliegue completado con éxito!"
-echo "  Nomad UI:    http://$CLOUD_IP:4646"
-echo "  Consul UI:   http://$CLOUD_IP:8500"
-echo "  Fabio UI:    http://$CLOUD_IP:9998"
-echo "  Gateway API: http://$CLOUD_IP:8000"
-echo "  Clients:     http://$CLOUD_IP:8000/clients/api"
-echo "  Products:    http://$CLOUD_IP:8000/products/api"
-echo "  Sales:       http://$CLOUD_IP:8000/sales"
+echo "  Nomad UI:    http://$CONTROL_PUBLIC_IP:4646"
+echo "  Consul UI:   http://$CONTROL_PUBLIC_IP:8500"
+echo "  Fabio UI:    http://$GATEWAY_PUBLIC_IP:9998"
+echo "  Gateway API: http://$GATEWAY_PUBLIC_IP:8000"
+echo "  Clients:     http://$GATEWAY_PUBLIC_IP:8000/clients/api"
+echo "  Products:    http://$GATEWAY_PUBLIC_IP:8000/products/api"
+echo "  Sales:       http://$GATEWAY_PUBLIC_IP:8000/sales"
 echo ""
