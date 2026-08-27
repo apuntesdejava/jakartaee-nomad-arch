@@ -100,7 +100,6 @@ variable "vault_version" {
 }
 
 variable "admin_ssh_public_key" {
-  description = "Admin SSH public key"
+  description = "OpenSSH public key used for the Azure administrator account"
   type        = string
-  default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCaN103RiDvN2mo1kYVAn8ANe2fSYMOoZQQ0G4Jv4wEQa8SdmMCNkscYviUODeEDAxCkFl9zxxv8MHONjFType6tRtSf1gb3XtXkK2xatjhLabYKmtAkVFoU8fPVne3U9tRL5E1RbtBs5UTo0Vzl86zl+u/2uEKuTdYgMpkm0zUOvhH0HFqmLQa1Sc4bmuDrPLlbpX7ayuKZLVQm5uutGBoXXihyayjcda0JLGsu0PboWW6EZZcYO/bMlW7dzJBpruGDxM2tIDByNW8FF9Kdkea9B3+wUch/pgz7FH39dZDFbpL42uq3pCnhEgLJ2d+/3Q+s66K4N4HjRH7tC1/jTz7 rsa-key-20260423"
 }

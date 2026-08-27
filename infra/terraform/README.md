@@ -1,204 +1,161 @@
-# Terraform: Despliegue Automático de Jakarta EE + Nomad + Consul + Vault en Azure
+# Infraestructura Azure con Terraform
 
-Este directorio contiene la configuración de Terraform para desplegar un entorno completo de **Jakarta EE + Nomad + Consul + Vault + Fabio + MySQL** en Azure de forma **100% automática**.
+Este directorio crea la infraestructura Azure del demo Jakarta EE/Quarkus con Nomad, Consul, Vault, Fabio, Podman y Azure Database for MySQL.
 
-## Arquitectura Final
+Terraform, Azure CLI y el estado de Terraform se administran exclusivamente desde Windows/PowerShell. Después de crear la infraestructura, WSL se usa únicamente para configurar Consul y desplegar los jobs compartidos mediante `infra/scripts/deploy-cloud.sh`.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Azure Resource Group                         │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                Virtual Network (10.0.0.0/16)               │  │
-│  │  ┌───────────────────────────────────────────────────────┐  │  │
-│  │  │            Subnet (10.0.1.0/24)                       │  │  │
-│  │  │                                                         │  │  │
-│  │  │  ┌──────────────────────────────────────────────────┐   │  │  │
-│  │  │  │         Ubuntu VM (B2s)                          │   │  │  │
-│  │  │  │ ┌─────────────────────────────────────────────┐  │   │  │  │
-│  │  │  │ │ Docker + MySQL                              │  │   │  │  │
-│  │  │  │ │ Consul (8500) + Nomad (4646) + Vault (8200) │  │   │  │  │
-│  │  │  │ │ Fabio Load Balancer (9998/9999)             │  │   │  │  │
-│  │  │  │ │ ┌─────────────────────────────────────────┐ │  │   │  │  │
-│  │  │  │ │ │ Clients API (8081)                      │ │  │   │  │  │
-│  │  │  │ │ │ Products API (8082)                     │ │  │   │  │  │
-│  │  │  │ │ │ Sales Web (8083)                        │ │  │   │  │  │
-│  │  │  │ │ └─────────────────────────────────────────┘ │  │   │  │  │
-│  │  │  │ └─────────────────────────────────────────────┘  │   │  │  │
-│  │  │  └──────────────────────────────────────────────────┘   │  │  │
-│  │  │                        ▲                                 │  │  │
-│  │  │                        │                                 │  │  │
-│  │  │              Public IP (Static)                         │  │  │
-│  │  │                                                         │  │  │
-│  │  │  NSG: SSH(22), Nomad(4646), Consul(8500), Fabio(9999)   │  │  │
-│  │  └───────────────────────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+## Arquitectura
 
-## 🚀 Despliegue 100% Automático
+- La VM de control ejecuta Nomad server, Consul server y Vault. Tiene el cliente de Nomad deshabilitado y no instala ningún runtime de contenedores.
+- El Virtual Machine Scale Set contiene los workers. Cada worker ejecuta Nomad client, Consul client, Podman rootful y `nomad-driver-podman`.
+- El Azure Load Balancer publica el gateway Fabio en el puerto 8000 y la UI de Fabio en el puerto 9998 para todos los workers.
+- Azure Database for MySQL Flexible Server proporciona la base de datos externa a los workers.
+- El NAT Gateway proporciona la salida a Internet de la subred.
+- Los mismos jobs de `infra/nomad/` se usan localmente y en Azure. Las imágenes `docker.io/...` identifican el registro Docker Hub; no implican el uso del runtime Docker.
 
-### Paso 1: Preparar Variables
+Terraform expone dos IP públicas con responsabilidades diferentes:
 
-```bash
-cd infra/terraform
+- `control_public_ip`: SSH, APIs y UIs de Nomad y Consul en la VM de control.
+- `gateway_public_ip`: Fabio y el tráfico público de las aplicaciones a través del Load Balancer.
 
-# Copiar template
-cp terraform.tfvars.example terraform.tfvars
+## Requisitos en Windows
 
-# Editar contraseñas (opcional, tiene defaults seguros)
-nano terraform.tfvars
+Instala en Windows:
+
+- Terraform.
+- Azure CLI.
+- El cliente Windows OpenSSH.
+
+Comprueba las herramientas desde PowerShell:
+
+```powershell
+terraform version
+az version
+ssh -V
 ```
 
-### Paso 2: Desplegar Todo
+Inicia sesión en Azure también desde PowerShell:
 
-```bash
-# Inicializar
+```powershell
+az login
+az account show
+```
+
+Si necesitas seleccionar otra suscripción:
+
+```powershell
+az account set --subscription "<SUBSCRIPTION_ID_OR_NAME>"
+```
+
+## Clave SSH
+
+La variable `admin_ssh_public_key` es obligatoria. El flujo recomendado usa Windows OpenSSH y una clave almacenada en el perfil de Windows. Antes de crearla, revisa las claves existentes:
+
+```powershell
+Get-ChildItem "$env:USERPROFILE\.ssh"
+```
+
+Si todavía no tienes una clave, puedes crearla desde PowerShell:
+
+```powershell
+ssh-keygen -t ed25519 `
+  -C "jakartaee-nomad-azure" `
+  -f "$env:USERPROFILE\.ssh\jakartaee-nomad-azure"
+```
+
+El comando genera una clave privada y un archivo público con extensión `.pub`. Conserva la clave privada únicamente en tu equipo y configura Terraform con el contenido completo del archivo público, por ejemplo:
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\jakartaee-nomad-azure.pub"
+```
+
+PuTTY puede utilizarse como alternativa opcional, pero Windows OpenSSH es el flujo principal de este proyecto. No incluyas una clave privada en `terraform.tfvars` ni en el repositorio.
+
+## Configurar variables
+
+Desde PowerShell, en la raíz del repositorio:
+
+```powershell
+Set-Location .\infra\terraform
+Copy-Item .\terraform.tfvars.example .\terraform.tfvars
+```
+
+Edita `terraform.tfvars` y sustituye como mínimo:
+
+- `admin_ssh_public_key` por el contenido completo de tu archivo `.pub`.
+- `mysql_server_name` por un nombre globalmente único.
+- Las credenciales de MySQL de ejemplo por valores adecuados para el entorno.
+- `my_ip` por tu IP pública con máscara `/32` para restringir el acceso cuando sea posible.
+
+El valor `ssh-ed25519 AAAA... jakartaee-nomad-azure` del archivo de ejemplo es solamente un marcador y no es una clave válida.
+
+## Crear la infraestructura desde PowerShell
+
+Todos estos comandos se ejecutan en `infra/terraform` desde Windows/PowerShell:
+
+```powershell
 terraform init
-
-# Planificar
+terraform fmt -check
+terraform validate
 terraform plan
-
-# DESPLEGAR TODO AUTOMÁTICAMENTE (15-20 minutos)
-terraform apply -auto-approve
+terraform apply
 ```
 
-### Paso 3: ¡Listo! Acceder a las Aplicaciones
+Revisa el plan antes de confirmar `terraform apply`. Cloud-init instala y configura la pila HashiCorp en la VM de control y Podman rootful con el driver externo de Nomad en los workers. Los jobs de aplicación no se despliegan desde Terraform.
 
-Después de 15-20 minutos, Terraform mostrará las URLs:
+## Obtener las IP públicas
+
+Cuando Terraform termine, mantente en PowerShell y consulta ambos outputs:
+
+```powershell
+$CONTROL_PUBLIC_IP = terraform output -raw control_public_ip
+$GATEWAY_PUBLIC_IP = terraform output -raw gateway_public_ip
+
+$CONTROL_PUBLIC_IP
+$GATEWAY_PUBLIC_IP
+```
+
+También puedes comprobar el acceso a la VM de control con Windows OpenSSH:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\jakartaee-nomad-azure" azureuser@$CONTROL_PUBLIC_IP
+```
+
+Para revisar cloud-init sin cambiar de terminal:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\jakartaee-nomad-azure" azureuser@$CONTROL_PUBLIC_IP "sudo cloud-init status --wait"
+ssh -i "$env:USERPROFILE\.ssh\jakartaee-nomad-azure" azureuser@$CONTROL_PUBLIC_IP "sudo tail -n 200 /var/log/cloud-init-output.log"
+```
+
+## Desplegar los workloads desde WSL
+
+Una vez creada y preparada la infraestructura, abre WSL, sitúate en la raíz del repositorio y pasa explícitamente las dos IP obtenidas en PowerShell:
 
 ```bash
-# Nomad UI (Jobs corriendo)
-http://<IP>:4646
-
-# Consul UI (Service Discovery)
-http://<IP>:8500
-
-# Vault UI (Secrets Management)
-http://<IP>:8200
-
-# Fabio Load Balancer (API Gateway)
-http://<IP>:9999
-
-# Aplicaciones Directas:
-# Clients API:  http://<IP>:8081/clients/api
-# Products API: http://<IP>:8082/products/api
-# Sales Web:    http://<IP>:8083/sales
+./infra/scripts/deploy-cloud.sh <CONTROL_PUBLIC_IP> <GATEWAY_PUBLIC_IP>
 ```
 
-## ✨ Lo Que Hace Automáticamente
+El script espera a Nomad, configura Consul KV y envía, en orden, los jobs de Fabio, clients, products y sales. Usa la IP de control para Nomad y Consul, y muestra las URLs públicas con la IP del gateway.
 
-| Componente     | Estado | Descripción                                |
-|----------------|--------|--------------------------------------------|
-| **Terraform**  | ✅      | Crea VM, redes, NSG, IP pública            |
-| **Cloud-init** | ✅      | Instala Docker, HashiCorp stack, Fabio     |
-| **MySQL**      | ✅      | Docker container con base de datos         |
-| **Consul**     | ✅      | Service discovery + KV store               |
-| **Nomad**      | ✅      | Job scheduler con integración Vault        |
-| **Vault**      | ✅      | Secrets management + JWT auth              |
-| **Fabio**      | ✅      | Load balancer automático                   |
-| **Jobs**       | ✅      | 3 aplicaciones desplegadas automáticamente |
-| **Config**     | ✅      | Consul KV poblado, Vault configurado       |
+No ejecutes Terraform, Azure CLI ni `terraform output` desde WSL. WSL no administra el estado de Terraform; la transferencia entre ambos entornos son los dos valores de IP copiados explícitamente.
 
-## 🎯 Beneficios vs AKS
+## Acceso después del despliegue
 
-| Aspecto            | Este Setup           | AKS                 |
-|--------------------|----------------------|---------------------|
-| **Complejidad**    | ⚠️ Media (Terraform) | ❌ Alta (Kubernetes) |
-| **Costo**          | ✅ $65/mes            | ❌ $150-300/mes      |
-| **Tiempo Deploy**  | ✅ 20 min             | ❌ 1-2 horas         |
-| **Mantenimiento**  | ✅ Bajo               | ❌ Alto              |
-| **Dev Experience** | ✅ Excelente          | ⚠️ Complejo         |
-| **Escalabilidad**  | ✅ Nomad clusters     | ✅ Kubernetes        |
+- Nomad UI: `http://<CONTROL_PUBLIC_IP>:4646`
+- Consul UI: `http://<CONTROL_PUBLIC_IP>:8500`
+- Fabio UI: `http://<GATEWAY_PUBLIC_IP>:9998`
+- Gateway y aplicaciones: `http://<GATEWAY_PUBLIC_IP>:8000`
 
-## 📋 Requisitos
+Consulta [`../../README.md`](../../README.md) para la arquitectura completa del repositorio y [`../../docs/local-environment.md`](../../docs/local-environment.md) para el entorno local Podman en Windows/WSL.
 
-- **Terraform** >= 1.0
-- **Azure CLI** configurado (`az login`)
-- **SSH Key** configurada en `terraform.tfvars` (viene con default)
-- **Cuenta Azure** con créditos
+## Destruir la infraestructura
 
-## 🔧 Configuración Avanzada
+Cuando sea necesario eliminar el entorno, vuelve a `infra/terraform` en Windows/PowerShell, revisa el objetivo y ejecuta:
 
-### Cambiar Región
-```hcl
-location = "westeurope"  # Europa
-location = "eastus"      # Este US (default)
-location = "brazilsouth" # Brasil
+```powershell
+terraform plan -destroy
+terraform destroy
 ```
 
-### Cambiar Tamaño VM
-```hcl
-vm_size = "Standard_B4ms"  # 4 vCPU, 16GB RAM
-```
-
-### Restringir IP SSH
-```hcl
-my_ip = "203.0.113.42/32"  # Tu IP específica
-```
-
-## 🔍 Monitoreo y Logs
-
-Si acabas de ejecutar `terraform apply`, la VM tardará unos **5-10 minutos** en terminar de configurar todo. Puedes monitorear el progreso con estos comandos:
-
-### 1. Ver progreso de instalación en tiempo real
-Este log muestra la instalación de Docker, Nomad, Consul y la descarga de imágenes.
-```bash
-ssh azureuser@<IP> "sudo tail -f /var/log/cloud-init-output.log"
-```
-
-### 2. Ver el despliegue automático de los Jobs
-Este servicio se encarga de ejecutar `nomad job run` para cada aplicación una vez que Nomad está listo.
-```bash
-ssh azureuser@<IP> "sudo journalctl -u nomad-jobs-setup -f"
-```
-
-### 3. Verificar estado de los contenedores Docker
-```bash
-ssh azureuser@<IP> "sudo docker ps"
-```
-
-### 4. Logs de los Orquestadores (Systemd)
-```bash
-# Nomad
-ssh azureuser@<IP> "sudo journalctl -u nomad -f"
-# Consul
-ssh azureuser@<IP> "sudo journalctl -u consul -f"
-# Vault
-ssh azureuser@<IP> "sudo journalctl -u vault -f"
-```
-
-## 🛠️ Solución de Problemas
-
-
-## 🧹 Limpieza
-
-```bash
-terraform destroy -auto-approve
-```
-
-**⚠️ Elimina TODO: VM, datos, IPs**
-
-## 📚 Arquitectura Técnica
-
-### Servicios Instalados Automáticamente
-- **Consul 1.17.3**: Service discovery, health checks, KV store
-- **Nomad 1.7.5**: Job scheduler con integración Vault
-- **Vault 1.15.6**: Secrets management con JWT authentication
-- **Fabio 1.6.3**: Load balancer automático via Consul
-- **MySQL 8.0**: Base de datos en Docker
-- **Docker**: Container runtime
-
-### Jobs Desplegados
-1. **clients-backend**: Quarkus API (puerto 8081)
-2. **products-backend**: Quarkus API (puerto 8082)  
-3. **sales-backend**: Payara web app (puerto 8083)
-
-### Seguridad
-- **Vault**: Gestiona credenciales MySQL
-- **JWT**: Autenticación Nomad ↔ Vault
-- **NSG**: Firewall restrictivo
-- **SSH**: Solo desde IP configurada
-
----
-
-**🎉 ¡Listo para revolucionar tu desarrollo Jakarta EE en la nube!**
+Esta operación elimina los recursos administrados por este estado de Terraform, incluidos los datos que no se hayan respaldado.
